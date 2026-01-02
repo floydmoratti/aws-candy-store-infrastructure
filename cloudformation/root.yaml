@@ -41,6 +41,13 @@ Parameters:
       - f
     ConstraintDescription: "a, b, c, d, e, f"
   
+  VpcCidr:
+    Type: String
+    Description: The CIDR block for the VPC
+    Default: "10.0.0.0/16"
+    AllowedPattern: "^([0-9]{1,3}\\.){3}[0-9]{1,3}/[0-9]{1,2}$"
+    ConstraintDescription: "Must be a valid CIDR block, e.g., 10.0.0.0/16"
+  
   Environment:
     Type: String
     Default: dev
@@ -72,6 +79,7 @@ Resources:
         AvailabilityZoneMain: !Ref AvailabilityZoneMain
         AvailabilityZoneBU: !Ref AvailabilityZoneBU
         Environment: !Ref Environment
+        VpcCidr: !Ref VpcCidr
     DeletionPolicy: Delete
     UpdateReplacePolicy: Delete
     # Nested stack for network resources: VPC, subnets, routes, and Internet Gateway.
@@ -92,7 +100,7 @@ Resources:
         # PrivateSubnet1: !GetAtt NetworkStack.Outputs.PrivateSubnet1
     DeletionPolicy: Delete
     UpdateReplacePolicy: Delete
-    # Nested stack for endpoints: NAT Gateway and S3 Gateway endpoints.
+    # Nested stack for endpoints: NAT Gateway, S3 Gateway endpoints and Private Routes.
     # Depends on the NetworkStack because it needs VPC and subnet information
 
 

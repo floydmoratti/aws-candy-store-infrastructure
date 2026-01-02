@@ -1,0 +1,4 @@
+template-file-path: cloudformation/network.yaml
+parameters:
+  Environment: dev
+tags: {}
