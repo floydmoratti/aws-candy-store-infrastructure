@@ -5,6 +5,8 @@
 
 # Virtual Environment
 .venv/
+.vscode/
+.gitignore
 
 # User-specific files
 *.rsuser
