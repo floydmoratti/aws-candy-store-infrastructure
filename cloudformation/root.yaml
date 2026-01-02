@@ -15,6 +15,32 @@ Parameters:
     Default: us-east-1
     Description: AWS region to deploy resources
   
+  AvailabilityZoneMain:
+    Type: String
+    Description: Availability Zone of main resources
+    Default: a
+    AllowedValues:
+      - a
+      - b
+      - c
+      - d
+      - e
+      - f
+    ConstraintDescription: "a, b, c, d, e, f"
+
+  AvailabilityZoneBU:
+    Type: String
+    Description: Availability Zone of backup resources (pilot light / failover AZ)
+    Default: b
+    AllowedValues:
+      - a
+      - b
+      - c
+      - d
+      - e
+      - f
+    ConstraintDescription: "a, b, c, d, e, f"
+  
   Environment:
     Type: String
     Default: dev
@@ -28,15 +54,121 @@ Parameters:
     Description: >
       URL of root directory where the nested stack templates are stored (network.yaml, endpoints.yaml, compute.yaml, database.yaml, edge.yaml)
       Can be Github (https://raw.githubusercontent.com/YOUR_GITHUB_USERNAME/YOUR_REPO_NAME/main/cloudformation/) or S3 (https://BUCKET_NAME.s3.amazonaws.com/)
-    Default: https://raw.githubusercontent.com/floydmoratti/YOUR_REPO_NAME/dev/cloudformation/
+    Default: https://raw.githubusercontent.com/floydmoratti/aws-ecommerce-infrastructure/dev/cloudformation/
 
 Resources:
 
   # ----------------------
-  # Network Stack
+  # Nested Stacks
   # ----------------------
 
   NetworkStack:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: !Sub "https://${TemplateBucketName}.s3.amazonaws.com/network.yaml
+      TemplateURL: !Sub "${NestedTemplateURL}network.yaml"
+      Parameters:
+        ProjectName: !Ref ProjectName
+        Region: !Ref Region
+        AvailabilityZoneMain: !Ref AvailabilityZoneMain
+        AvailabilityZoneBU: !Ref AvailabilityZoneBU
+        Environment: !Ref Environment
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    # Nested stack for network resources: VPC, subnets, routes, and Internet Gateway.
+  
+
+  EndpointsStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub "${NestedTemplateURL}endpoints.yaml"
+      Parameters:
+        ProjectName: !Ref ProjectName
+        Region: !Ref Region
+        AvailabilityZoneMain: !Ref AvailabilityZoneMain
+        AvailabilityZoneBU: !Ref AvailabilityZoneBU
+        Environment: !Ref Environment
+        VpcId: !GetAtt NetworkStack.Outputs.VpcId
+        # PublicSubnet1: !GetAtt NetworkStack.Outputs.PublicSubnet1
+        # PrivateSubnet1: !GetAtt NetworkStack.Outputs.PrivateSubnet1
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    # Nested stack for endpoints: NAT Gateway and S3 Gateway endpoints.
+    # Depends on the NetworkStack because it needs VPC and subnet information
+
+
+  DatabaseStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub "${NestedTemplateURL}database.yaml"
+      Parameters:
+        ProjectName: !Ref ProjectName
+        Region: !Ref Region
+        AvailabilityZoneMain: !Ref AvailabilityZoneMain
+        AvailabilityZoneBU: !Ref AvailabilityZoneBU
+        Environment: !Ref Environment
+        VpcId: !GetAtt NetworkStack.Outputs.VpcId
+        # PrivateSubnet1: !GetAtt NetworkStack.Outputs.PrivateSubnet1
+        # PrivateSubnet2: !GetAtt NetworkStack.Outputs.PrivateSubnet2
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    # Nested stack for the Aurora Serverless database
+    # Depends on the NetworkStack because it requires private subnets
+
+
+  ComputeStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub "${NestedTemplateURL}compute.yaml"
+      Parameters:
+        ProjectName: !Ref ProjectName
+        Region: !Ref Region
+        AvailabilityZoneMain: !Ref AvailabilityZoneMain
+        AvailabilityZoneBU: !Ref AvailabilityZoneBU
+        Environment: !Ref Environment
+        VpcId: !GetAtt NetworkStack.Outputs.VpcId
+        # PublicSubnet1: !GetAtt NetworkStack.Outputs.PublicSubnet1
+        # PrivateSubnet1: !GetAtt NetworkStack.Outputs.PrivateSubnet1
+        DatabaseEndpoint: !GetAtt DatabaseStack.Outputs.AuroraEndpoint
+        DatabaseSecret: !GetAtt DatabaseStack.Outputs.DatabaseSecretArn
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    # Nested stack for ECS compute resources, ALB, IAM roles, and Secrets Manager
+    # Depends on NetworkStack, DatabaseStack, and EndpointsStack
+    # Handles main AZ and pilot light AZ deployment
+
+
+  EdgeStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub "${NestedTemplateURL}edge.yaml"
+      Parameters:
+        ProjectName: !Ref ProjectName
+        Region: !Ref Region
+        AvailabilityZoneMain: !Ref AvailabilityZoneMain
+        AvailabilityZoneBU: !Ref AvailabilityZoneBU
+        Environment: !Ref Environment
+        AlbDnsName: !GetAtt ComputeStack.Outputs.AlbDnsName
+        S3BucketName: !GetAtt ComputeStack.Outputs.StaticContentBucket
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    # Nested stack for CloudFront and S3 static content distribution
+    # Depends on ComputeStack because it uses the ALB and S3 bucket outputs
+
+
+Outputs:
+
+  NetworkStackId:
+    Description: Stack ID of the network resources
+    Value: !Ref NetworkStack
+  
+  ComputeStackId:
+    Description: Stack ID of the compute resources
+    Value: !Ref ComputeStack
+
+  DatabaseStackId:
+    Description: Stack ID of the database resources
+    Value: !Ref DatabaseStack
+
+  EdgeStackId:
+    Description: Stack ID of the edge resources
+    Value: !Ref EdgeStack
