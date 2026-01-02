@@ -3,6 +3,9 @@
 ##
 ## Get latest from https://github.com/github/gitignore/blob/main/VisualStudio.gitignore
 
+# Virtual Environment
+.venv/
+
 # User-specific files
 *.rsuser
 *.suo
@@ -416,3 +419,25 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+
+
+# macOS system files
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Thumbnails
+._*
+
+# Spotlight
+.Spotlight-V100
+.Trashes
+
+# Time Machine
+.Backups.backupdb
+
+# AFP share folders
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
