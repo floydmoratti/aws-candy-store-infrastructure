@@ -4,11 +4,27 @@ Description: >
   This template orchestrates the deployment of all nested stacks:
   network, endpoints, compute, database, and edge.
 
+
 Parameters:
+
   ProjectName:
     Type: String
     Description: Project name prefix for resource naming
     Default: candy-store
+
+  ContainerName:
+    Type: String
+    Description: Container name
+    Default: candy-store-api
+
+  ContainerVersion:
+    Type: String
+    Description: Container image tag to deploy (e.g. latest, v1.0.0)
+    Default: latest  # Delete Default
+
+  EcrRepositoryUri:
+    Type: String
+    Description: URI of ECR Repository
   
   VpcCidr:
     Type: String
@@ -31,6 +47,12 @@ Parameters:
       URL of root directory where the nested stack templates are stored (network.yaml, endpoints.yaml, compute.yaml, database.yaml, edge.yaml)
       Can be Github (https://raw.githubusercontent.com/YOUR_GITHUB_USERNAME/YOUR_REPO_NAME/main/cloudformation/) or S3 (https://BUCKET_NAME.s3.amazonaws.com/)
     Default: https://raw.githubusercontent.com/floydmoratti/aws-ecommerce-infrastructure/dev/cloudformation/
+
+  BackupDesiredCount:
+    Type: Number
+    Description: Desired count for pilot light ECS service. Can be updated by Step Functions or manually.
+    Default: 0
+
 
 Resources:
 
@@ -97,8 +119,16 @@ Resources:
         ProjectName: !Ref ProjectName
         Environment: !Ref Environment
         VpcId: !GetAtt NetworkStack.Outputs.VpcId
-        DatabaseEndpoint: !GetAtt DatabaseStack.Outputs.AuroraWriterEndpoint
-        DatabaseSecret: !GetAtt DatabaseStack.Outputs.DatabaseSecretArn
+        PublicAlbSubnet1a: !GetAtt NetworkStack.Outputs.PublicAlbSubnet1a
+        PrivateEcsSubnet2a: !GetAtt NetworkStack.Outputs.PrivateEcsSubnet2a
+        PublicAlbSubnet1b: !GetAtt NetworkStack.Outputs.PublicAlbSubnet1b
+        PublicEcsSubnet2b: !GetAtt NetworkStack.Outputs.PublicEcsSubnet2b
+        AuroraWriterEndpoint: !GetAtt DatabaseStack.Outputs.AuroraWriterEndpoint
+        DatabaseSecretArn: !GetAtt DatabaseStack.Outputs.DatabaseSecretArn
+        BackupDesiredCount: !Ref BackupDesiredCount
+        ContainerName: !Ref ContainerName
+        ContainerVersion: !Ref ContainerVersion
+        EcrRepositoryUri: !Ref EcrRepositoryUri
     DeletionPolicy: Delete
     UpdateReplacePolicy: Delete
     # Nested stack for ECS compute resources, ALB, IAM roles, and Secrets Manager

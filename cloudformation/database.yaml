@@ -3,7 +3,9 @@ Description: >
   Database stack for aws-ecommerce-infrastructure.
   Creates Aurora Serverless cluster with writer in AZ1 and reader in AZ2, plus Secrets Manager.
 
+
 Parameters:
+
   ProjectName:
     Type: String
     Description: Project name prefix for resource naming

@@ -1,0 +1,362 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Compute stack for aws-ecommerce-infrastructure.
+  Creates ECS Cluster, Fargate Task Definitions & Services, ALB, IAM roles, and connections to Aurora.
+
+
+Parameters:
+
+  ProjectName:
+    Type: String
+    Description: Project name prefix for resource naming
+    Default: candy-store  # Delete Default
+  
+  Environment:
+    Type: String
+    Description: Deployment environment
+    Default: dev  # Delete Default
+  
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC ID from network stack
+  
+  PublicAlbSubnet1a:
+    Type: AWS::EC2::Subnet::Id
+    Description: Public subnet for ALB and NAT Gateway in AvailabilityZone-A (main)
+
+  PublicAlbSubnet1b:
+    Type: AWS::EC2::Subnet::Id
+    Description: Public subnet for ALB in AvailabilityZone-B (backup)
+
+  PrivateEcsSubnet2a:
+    Type: AWS::EC2::Subnet::Id
+    Description: Private subnet for ECS in AvailabilityZone-A (main)
+
+  PublicEcsSubnet2b:
+    Type: AWS::EC2::Subnet::Id
+    Description: Public subnet for ECS in AvailabilityZone-B (backup)
+  
+  BackupDesiredCount:
+    Type: Number
+    Description: Desired count for pilot light ECS service. Can be updated by Step Functions or manually.
+    Default: 0  # Delete Default
+  
+  AuroraWriterEndpoint:
+    Type: String
+    Description: Aurora writer endpoint
+  
+  DatabaseSecretArn:
+    Type: String
+    Description: ARN of Secrets Manager secret for DB credentials
+
+  ContainerName:
+    Type: String
+    Description: Container name
+    Default: candy-store-api  # Delete Default
+  
+  ContainerVersion:
+    Type: String
+    Description: Container image tag to deploy (e.g. latest, v1.0.0)
+    Default: latest  # Delete Default
+
+  EcrRepositoryUri:
+    Type: String
+    Description: URI of ECR Repository
+
+
+Resources:
+
+  # ----------------------
+  # ECS Cluster
+  # ----------------------
+
+  EcsCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Sub "${ProjectName}-${Environment}-ecs-cluster"
+  
+
+  # ----------------------
+  # IAM Role for ECS Tasks
+  # ----------------------
+
+  EcsExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-ecs-execution-role"
+
+  EcsTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: !Sub "${ProjectName}-${Environment}-ecs-task-policy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: SecretsManagerReadAccess
+                Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: !Ref DatabaseSecretArn
+      # ManagedPolicyArns:
+      #   - arn:aws:iam::aws:policy/AmazonRDSFullAccess
+      #   - arn:aws:iam::aws:policy/SecretsManagerReadWrite
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-ecs-task-role"
+
+
+  # ----------------------
+  # Security Groups
+  # ----------------------
+
+  AlbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for ALB
+      VpcId: !Ref VpcId
+      # Inbound: Internet HTTPS only
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-alb-sg" 
+
+  AlbEgressRule:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      GroupId: !Ref AlbSecurityGroup
+      IpProtocol: tcp
+      FromPort: 80
+      ToPort: 80
+      DestinationSecurityGroupId: !Ref EcsSecurityGroup
+      # Rule for ALB. Outbound traffic only HTTP to ECS
+
+  EcsSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for ECS tasks
+      VpcId: !Ref VpcId
+      # Outbound: HTTPS only to Internet
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-ecs-sg"
+  
+  EcsIngressRule:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref EcsSecurityGroup
+      IpProtocol: tcp
+      FromPort: 80
+      ToPort: 80
+      SourceSecurityGroupId: !Ref AlbSecurityGroup
+      # Rule for ECS. Inbound traffic only HTTP from ALB
+
+
+  # ----------------------
+  # Application Load Balancer
+  # ----------------------
+
+  Alb:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: !Sub "${ProjectName}-${Environment}-alb"
+      Scheme: internet-facing
+      Subnets:
+        - !Ref PublicAlbSubnet1a
+        - !Ref PublicAlbSubnet1b
+      SecurityGroups:
+        - !Ref AlbSecurityGroup
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-alb"
+  
+  AlbMainTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Port: 80
+      Protocol: HTTP
+      VpcId: !Ref VpcId
+      TargetType: ip
+      HealthCheckProtocol: HTTP
+      HealthCheckPath: /health
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 2
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-main-tg"
+
+  AlbBackupTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Port: 80
+      Protocol: HTTP
+      VpcId: !Ref VpcId
+      TargetType: ip
+      HealthCheckProtocol: HTTP
+      HealthCheckPath: /health
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 2
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-backup-tg"
+
+  AlbListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref Alb
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: forward
+          ForwardConfig:
+            TargetGroups:
+              - TargetGroupArn: !Ref AlbMainTargetGroup
+                Weight: 100
+              - TargetGroupArn: !Ref AlbBackupTargetGroup
+                Weight: 0
+  
+
+  # ----------------------
+  # ECS Service (Main in AZ-a)
+  # ----------------------
+
+  EcsTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    DependsOn:
+      - EcsLogGroup
+    Properties:
+      Family: !Sub "${ProjectName}-${Environment}-task"
+      Cpu: "256"
+      Memory: "512"
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      ExecutionRoleArn: !Ref EcsExecutionRole
+      TaskRoleArn: !Ref EcsTaskRole
+      ContainerDefinitions: 
+        - Name: !Ref ContainerName
+          Image: !Sub "${EcrRepositoryUri}:${ContainerVersion}"
+          PortMappings:
+            - ContainerPort: 80
+          Environment:
+            - Name: DATABASE_ENDPOINT
+              Value: !Ref AuroraWriterEndpoint
+            - Name: DATABASE_SECRET_ARN
+              Value: !Ref DatabaseSecretArn
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Sub "/ecs/${ProjectName}-${Environment}"
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: ecs
+
+  EcsServiceMain:
+    Type: AWS::ECS::Service
+    DependsOn:
+      - AlbListener
+    Properties:
+      ServiceName: !Sub "${ProjectName}-${Environment}-ecs-main"
+      PlatformVersion: LATEST
+      Cluster: !Ref EcsCluster
+      LaunchType: FARGATE
+      DeploymentController:
+        Type: ECS
+      TaskDefinition: !Ref EcsTaskDefinition
+      DesiredCount: 1
+      DeploymentConfiguration:
+        DeploymentCircuitBreaker:
+          Enable: true
+          Rollback: true
+      HealthCheckGracePeriodSeconds: 30
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: DISABLED
+          Subnets:
+            - !Ref PrivateEcsSubnet2a
+          SecurityGroups:
+            - !Ref EcsSecurityGroup
+      LoadBalancers:
+        - TargetGroupArn: !Ref AlbMainTargetGroup
+          ContainerName: !Ref ContainerName
+          ContainerPort: 80
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-ecs-main"
+
+  EcsServiceBackup:
+    Type: AWS::ECS::Service
+    DependsOn:
+      - AlbListener
+    Properties:
+      ServiceName: !Sub "${ProjectName}-${Environment}-ecs-backup"
+      PlatformVersion: LATEST
+      Cluster: !Ref EcsCluster
+      LaunchType: FARGATE
+      DeploymentController:
+        Type: ECS
+      TaskDefinition: !Ref EcsTaskDefinition
+      DesiredCount: !Ref BackupDesiredCount  # pilot light service
+      DeploymentConfiguration:
+        DeploymentCircuitBreaker:
+          Enable: true
+          Rollback: true
+      HealthCheckGracePeriodSeconds: 30
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          Subnets:
+            - !Ref PublicEcsSubnet2b
+          SecurityGroups:
+            - !Ref EcsSecurityGroup
+      LoadBalancers:
+        - TargetGroupArn: !Ref AlbBackupTargetGroup
+          ContainerName: !Ref ContainerName
+          ContainerPort: 80
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-ecs-backup"
+
+
+  # ----------------------
+  # Log Group
+  # ----------------------
+
+  EcsLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/ecs/${ProjectName}-${Environment}"
+      RetentionInDays: 5
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    # Uses AWS-managed KMS key for CloudWatch Logs encryption

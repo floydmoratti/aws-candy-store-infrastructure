@@ -5,7 +5,9 @@ Description: >
   isolated route tables for Aurora,
   and an S3 Gateway Endpoint for private ECS access.
 
+
 Parameters:
+
   ProjectName:
     Type: String
     Description: Project name prefix for resource naming
