@@ -1,0 +1,133 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Database stack for aws-ecommerce-infrastructure.
+  Creates Aurora Serverless cluster with writer in AZ1 and reader in AZ2, plus Secrets Manager.
+
+Parameters:
+  ProjectName:
+    Type: String
+    Description: Project name prefix for resource naming
+    Default: candy-store  # Delete Default
+  
+  Environment:
+    Type: String
+    Description: Deployment environment
+    Default: dev  # Delete Default
+  
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC ID from network stack
+  
+  PrivateDbSubnet3a:
+    Type: AWS::EC2::Subnet::Id
+    Description: Private subnet for Aurora in AvailabilityZone-A (main)
+
+  PrivateDbSubnet3b:
+    Type: AWS::EC2::Subnet::Id
+    Description: Private subnet for Aurora in AvailabilityZone-B (backup)
+
+  PrivateEcsSubnet2aCidr:
+    Type: String
+    Description: CIDR of private ECS subnet (AZ-a)
+
+  PublicEcsSubnet2bCidr:
+    Type: String
+    Description: CIDR of public ECS subnet (AZ-b)
+
+
+Resources:
+
+  # ----------------------
+  # Security Group
+  # ----------------------
+
+  DbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Access to Aurora Serverless v2 cluster from ECS subnets only
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          CidrIp: !Ref PrivateEcsSubnet2aCidr
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          CidrIp: !Ref PublicEcsSubnet2bCidr
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-aurora-sg"
+
+
+  # ----------------------
+  # Secrets Manager
+  # ----------------------
+
+  DatabaseSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub "${ProjectName}-${Environment}-db-credentials"
+      Description: "Database credentials for Aurora cluster"
+      KmsKeyId: alias/aws/secretsmanager  # default AWS key
+      GenerateSecretString:
+        SecretStringTemplate: '{"username":"dbadmin"}'
+        GenerateStringKey: "password"
+        ExcludeCharacters: '"@/\'
+        PasswordLength: 16
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+
+
+  # ----------------------
+  # Aurora Serverless Cluster
+  # ----------------------
+
+  AuroraSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: !Sub "Aurora private subnets for ${ProjectName}-${Environment}"
+      SubnetIds:
+        - !Ref PrivateDbSubnet3a
+        - !Ref PrivateDbSubnet3b
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-aurora-subnet-group"
+  
+  AuroraCluster:
+    Type: AWS::RDS::DBCluster
+    Properties:
+      Engine: aurora-postgresql
+      EngineMode: serverless
+      DatabaseName: !Sub "${ProjectName}-${Environment}-db"
+      MasterUsername: !Sub "{{resolve:secretsmanager:${DatabaseSecret}:SecretString:username}}"
+      MasterUserPassword: !Sub "{{resolve:secretsmanager:${DatabaseSecret}:SecretString:password}}"
+      DBSubnetGroupName: !Ref AuroraSubnetGroup
+      VpcSecurityGroupIds:
+        - !Ref DbSecurityGroup
+      BackupRetentionPeriod: 3
+      ScalingConfiguration:
+        AutoPause: true
+        MinCapacity: 0.5
+        MaxCapacity: 0.5
+        SecondsUntilAutoPause: 30
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-aurora-cluster"
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+
+
+Outputs:
+
+  AuroraWriterEndpoint:
+    Description: Aurora cluster writer endpoint
+    Value: !GetAtt AuroraCluster.Endpoint.Address
+  
+  AuroraReaderEndpoint:
+    Description: Aurora cluster reader endpoint
+    Value: !GetAtt AuroraCluster.ReadEndpoint.Address
+  
+  DatabaseSecretArn:
+    Description: Secrets Manager ARN for database credentials
+    Value: !Ref DatabaseSecret

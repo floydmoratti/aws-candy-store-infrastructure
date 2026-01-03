@@ -79,8 +79,10 @@ Resources:
         ProjectName: !Ref ProjectName
         Environment: !Ref Environment
         VpcId: !GetAtt NetworkStack.Outputs.VpcId
-        # PrivateSubnet1: !GetAtt NetworkStack.Outputs.PrivateSubnet1
-        # PrivateSubnet2: !GetAtt NetworkStack.Outputs.PrivateSubnet2
+        PrivateDbSubnet3a: !GetAtt NetworkStack.Outputs.PrivateDbSubnet3a
+        PrivateDbSubnet3b: !GetAtt NetworkStack.Outputs.PrivateDbSubnet3b
+        PrivateEcsSubnet2aCidr: !GetAtt NetworkStack.Outputs.PrivateEcsSubnet2aCidr
+        PublicEcsSubnet2bCidr: !GetAtt NetworkStack.Outputs.PublicEcsSubnet2bCidr
     DeletionPolicy: Delete
     UpdateReplacePolicy: Delete
     # Nested stack for the Aurora Serverless database
@@ -95,15 +97,12 @@ Resources:
         ProjectName: !Ref ProjectName
         Environment: !Ref Environment
         VpcId: !GetAtt NetworkStack.Outputs.VpcId
-        # PublicSubnet1: !GetAtt NetworkStack.Outputs.PublicSubnet1
-        # PrivateSubnet1: !GetAtt NetworkStack.Outputs.PrivateSubnet1
-        DatabaseEndpoint: !GetAtt DatabaseStack.Outputs.AuroraEndpoint
+        DatabaseEndpoint: !GetAtt DatabaseStack.Outputs.AuroraWriterEndpoint
         DatabaseSecret: !GetAtt DatabaseStack.Outputs.DatabaseSecretArn
     DeletionPolicy: Delete
     UpdateReplacePolicy: Delete
     # Nested stack for ECS compute resources, ALB, IAM roles, and Secrets Manager
     # Depends on NetworkStack, DatabaseStack, and EndpointsStack
-    # Handles main AZ and pilot light AZ deployment
 
 
   EdgeStack:
