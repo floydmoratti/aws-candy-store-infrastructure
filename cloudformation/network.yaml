@@ -10,17 +10,12 @@ Parameters:
     Description: Project name prefix for resource naming
     Default: candy-store  # Delete Default
 
-  Region:
-    Type: String
-    Description: AWS region to deploy resources
-    Default: us-east-1  # Delete Default
-
-  AvailabilityZoneMain:
+  AvailabilityZoneA:
     Type: String
     Description: Availability Zone of main resources
     Default: a  # Delete Default
 
-  AvailabilityZoneBU:
+  AvailabilityZoneB:
     Type: String
     Description: Availability Zone of backup resources (pilot light / failover AZ)
     Default: b  # Delete Default
@@ -70,60 +65,65 @@ Resources:
   # Subnets
   # ----------------------
 
-  NATSubnetAZ1:
+  PublicSubnet1a:  
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC
       CidrBlock: !Select [0, !Cidr [!Ref VpcCidr, 5, 8]]
-      AvailabilityZone: !Sub "${Region}${AvailabilityZoneMain}"
-      MapPublicIpOnLaunch: true  # Public Subnet
+      AvailabilityZone: !Sub "${AWS::Region}${AvailabilityZoneA}"
+      MapPublicIpOnLaunch: true
       Tags:
         - Key: Name
-          Value: !Sub "${ProjectName}-${Environment}-nat-public-main"
+          Value: !Sub "${ProjectName}-${Environment}-nat-public-subnet-1a"
+    # Public Subnet for NAT Gateway
   
-  ECSSubnetAZ1:
+  PrivateSubnet2a:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC
       CidrBlock: !Select [1, !Cidr [!Ref VpcCidr, 5, 8]]
-      AvailabilityZone: !Sub "${Region}${AvailabilityZoneMain}"
-      MapPublicIpOnLaunch: false  # Private Subnet
+      AvailabilityZone: !Sub "${AWS::Region}${AvailabilityZoneA}"
+      MapPublicIpOnLaunch: false
       Tags:
         - Key: Name
-          Value: !Sub "${ProjectName}-${Environment}-ecs-private-main"
+          Value: !Sub "${ProjectName}-${Environment}-ecs-private-subnet-2a"
+    # Private Subnet for ECS
 
-  AuroraSubnetAZ1:
+  PrivateSubnet3a:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC
       CidrBlock: !Select [2, !Cidr [!Ref VpcCidr, 5, 8]]
-      AvailabilityZone: !Sub "${Region}${AvailabilityZoneMain}"
-      MapPublicIpOnLaunch: false  # Private Subnet
+      AvailabilityZone: !Sub "${AWS::Region}${AvailabilityZoneA}"
+      MapPublicIpOnLaunch: false
       Tags:
         - Key: Name
-          Value: !Sub "${ProjectName}-${Environment}-aurora-private-main"
+          Value: !Sub "${ProjectName}-${Environment}-aurora-private-subnet-3a"
+    # Private Subnet for Aurora
 
-  ECSSubnetAZ2:
+  PublicSubnet2b:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC
       CidrBlock: !Select [3, !Cidr [!Ref VpcCidr, 5, 8]]
-      AvailabilityZone: !Sub "${Region}${AvailabilityZoneBU}"
-      MapPublicIpOnLaunch: true  # Public Subnet
+      AvailabilityZone: !Sub "${AWS::Region}${AvailabilityZoneB}"
+      MapPublicIpOnLaunch: true
       Tags:
         - Key: Name
-          Value: !Sub "${ProjectName}-${Environment}-ecs-public-backup"
+          Value: !Sub "${ProjectName}-${Environment}-ecs-public-subnet-2b"
+    # Public Subnet for ECS (backup)
 
-  AuroraSubnetAZ2:
+  PrivateSubnet3b:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC
       CidrBlock: !Select [4, !Cidr [!Ref VpcCidr, 5, 8]]
-      AvailabilityZone: !Sub "${Region}${AvailabilityZoneBU}"
-      MapPublicIpOnLaunch: false  # Private Subnet
+      AvailabilityZone: !Sub "${AWS::Region}${AvailabilityZoneB}"
+      MapPublicIpOnLaunch: false
       Tags:
         - Key: Name
-          Value: !Sub "${ProjectName}-${Environment}-aurora-private-backup"
+          Value: !Sub "${ProjectName}-${Environment}-aurora-private-subnet-3b"
+    # Private Subnet for Aurora (backup)
 
 
   # ----------------------
@@ -136,7 +136,8 @@ Resources:
       VpcId: !Ref VPC
       Tags:
         - Key: Name
-          Value: !Sub "${ProjectName}-${Environment}-public-routetable"
+          Value: !Sub "${ProjectName}-${Environment}-public-rt"
+    # Route Table for all public subnets
   
   InternetRoute:
     Type: AWS::EC2::Route
@@ -145,18 +146,21 @@ Resources:
       RouteTableId: !Ref PublicRouteTable
       DestinationCidrBlock: 0.0.0.0/0
       GatewayId: !Ref InternetGateway
+    # Internet Route for Public Route Table
   
-  NATSubnetAZ1RouteTableAssociation:
+  PublicSubnet1aAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
-      SubnetId: !Ref NATSubnetAZ1
+      SubnetId: !Ref PublicSubnet1a
       RouteTableId: !Ref PublicRouteTable
+    # Associates Public Subnet 1a (NAT Gateway)
   
-  ECSSubnetAZ2RouteTableAssociation:
+  PublicSubnet2aAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
-      SubnetId: !Ref ECSSubnetAZ2
+      SubnetId: !Ref PublicSubnet2b
       RouteTableId: !Ref PublicRouteTable
+    # Associates Public Subnet 2b (ECS backup)
 
 
 Outputs:
@@ -165,22 +169,22 @@ Outputs:
     Description: VPC ID
     Value: !Ref VPC
   
-  NATSubnetAZ1:
-    Description: Public subnet for NAT Gateway in AZ 1 (main)
-    Value: !Ref NATSubnetAZ1
+  PublicSubnet1a:
+    Description: Public subnet for NAT Gateway in AvailabilityZone-A (main)
+    Value: !Ref PublicSubnet1a
   
-  ECSSubnetAZ1:
-    Description: Private subnet for ECS in AZ 1 (main)
-    Value: !Ref ECSSubnetAZ1
+  PrivateSubnet2a:
+    Description: Private subnet for ECS in AvailabilityZone-A (main)
+    Value: !Ref PrivateSubnet2a
   
-  AuroraSubnetAZ1:
-    Description: Private subnet for Aurora in AZ 1 (main)
-    Value: !Ref AuroraSubnetAZ1
+  PrivateSubnet3a:
+    Description: Private subnet for Aurora in AvailabilityZone-A (main)
+    Value: !Ref PrivateSubnet2a
   
-  ECSSubnetAZ2:
-    Description: Public subnet for ECS in AZ 2 (backup)
-    Value: !Ref ECSSubnetAZ2
+  PublicSubnet2b:
+    Description: Public subnet for ECS in AvailabilityZone-B (backup)
+    Value: !Ref PublicSubnet2b
   
-  AuroraSubnetAZ2:
-    Description: Private subnet for Aurora in AZ 2 (backup)
-    Value: !Ref AuroraSubnetAZ2
+  PrivateSubnet3b:
+    Description: Private subnet for Aurora in AvailabilityZone-B (backup)
+    Value: !Ref PrivateSubnet3b

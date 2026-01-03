@@ -7,15 +7,10 @@ Description: >
 Parameters:
   ProjectName:
     Type: String
-    Default: candy-store
     Description: Project name prefix for resource naming
+    Default: candy-store
   
-  Region:
-    Type: String
-    Default: us-east-1
-    Description: AWS region to deploy resources
-  
-  AvailabilityZoneMain:
+  AvailabilityZoneA:
     Type: String
     Description: Availability Zone of main resources
     Default: a
@@ -28,7 +23,7 @@ Parameters:
       - f
     ConstraintDescription: "a, b, c, d, e, f"
 
-  AvailabilityZoneBU:
+  AvailabilityZoneB:
     Type: String
     Description: Availability Zone of backup resources (pilot light / failover AZ)
     Default: b
@@ -50,11 +45,11 @@ Parameters:
   
   Environment:
     Type: String
+    Description: Deployment environment
     Default: dev
     AllowedValues:
       - dev
       - prod
-    Description: Deployment environment
   
   NestedTemplateURL:
     Type: String
@@ -75,9 +70,8 @@ Resources:
       TemplateURL: !Sub "${NestedTemplateURL}network.yaml"
       Parameters:
         ProjectName: !Ref ProjectName
-        Region: !Ref Region
-        AvailabilityZoneMain: !Ref AvailabilityZoneMain
-        AvailabilityZoneBU: !Ref AvailabilityZoneBU
+        AvailabilityZoneA: !Ref AvailabilityZoneA
+        AvailabilityZoneB: !Ref AvailabilityZoneB
         Environment: !Ref Environment
         VpcCidr: !Ref VpcCidr
     DeletionPolicy: Delete
@@ -91,9 +85,8 @@ Resources:
       TemplateURL: !Sub "${NestedTemplateURL}endpoints.yaml"
       Parameters:
         ProjectName: !Ref ProjectName
-        Region: !Ref Region
-        AvailabilityZoneMain: !Ref AvailabilityZoneMain
-        AvailabilityZoneBU: !Ref AvailabilityZoneBU
+        AvailabilityZoneA: !Ref AvailabilityZoneA
+        AvailabilityZoneB: !Ref AvailabilityZoneB
         Environment: !Ref Environment
         VpcId: !GetAtt NetworkStack.Outputs.VpcId
         # PublicSubnet1: !GetAtt NetworkStack.Outputs.PublicSubnet1
@@ -110,9 +103,8 @@ Resources:
       TemplateURL: !Sub "${NestedTemplateURL}database.yaml"
       Parameters:
         ProjectName: !Ref ProjectName
-        Region: !Ref Region
-        AvailabilityZoneMain: !Ref AvailabilityZoneMain
-        AvailabilityZoneBU: !Ref AvailabilityZoneBU
+        AvailabilityZoneA: !Ref AvailabilityZoneA
+        AvailabilityZoneB: !Ref AvailabilityZoneB
         Environment: !Ref Environment
         VpcId: !GetAtt NetworkStack.Outputs.VpcId
         # PrivateSubnet1: !GetAtt NetworkStack.Outputs.PrivateSubnet1
@@ -129,9 +121,8 @@ Resources:
       TemplateURL: !Sub "${NestedTemplateURL}compute.yaml"
       Parameters:
         ProjectName: !Ref ProjectName
-        Region: !Ref Region
-        AvailabilityZoneMain: !Ref AvailabilityZoneMain
-        AvailabilityZoneBU: !Ref AvailabilityZoneBU
+        AvailabilityZoneA: !Ref AvailabilityZoneA
+        AvailabilityZoneB: !Ref AvailabilityZoneB
         Environment: !Ref Environment
         VpcId: !GetAtt NetworkStack.Outputs.VpcId
         # PublicSubnet1: !GetAtt NetworkStack.Outputs.PublicSubnet1
@@ -151,9 +142,8 @@ Resources:
       TemplateURL: !Sub "${NestedTemplateURL}edge.yaml"
       Parameters:
         ProjectName: !Ref ProjectName
-        Region: !Ref Region
-        AvailabilityZoneMain: !Ref AvailabilityZoneMain
-        AvailabilityZoneBU: !Ref AvailabilityZoneBU
+        AvailabilityZoneA: !Ref AvailabilityZoneA
+        AvailabilityZoneB: !Ref AvailabilityZoneB
         Environment: !Ref Environment
         AlbDnsName: !GetAtt ComputeStack.Outputs.AlbDnsName
         S3BucketName: !GetAtt ComputeStack.Outputs.StaticContentBucket

@@ -1,0 +1,162 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Endpoints stack for aws-ecommerce-infrastructure.
+  Creates a single NAT Gateway for ECS in AZ1,
+  isolated route tables for Aurora,
+  and an S3 Gateway Endpoint for private ECS access.
+
+Parameters:
+  ProjectName:
+    Type: String
+    Description: Project name prefix for resource naming
+    Default: candy-store  # Delete Default
+  
+  Environment:
+    Type: String
+    Description: Deployment environment
+    Default: dev  # Delete Default
+  
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC ID from network stack
+
+  PublicSubnet1a:
+    Type: AWS::EC2::Subnet::Id
+    Description: Public subnet for NAT Gateway in AvailabilityZone-A (main)
+
+  PrivateSubnet2a:
+    Type: AWS::EC2::Subnet::Id
+    Description: Private subnet for ECS in AvailabilityZone-A (main)
+
+  PrivateSubnet3a:
+    Type: AWS::EC2::Subnet::Id
+    Description: Private subnet for Aurora in AvailabilityZone-A (main)
+  
+  PrivateSubnet3b:
+    Type: AWS::EC2::Subnet::Id
+    Description: Private subnet for Aurora in AvailabilityZone-B (backup)
+
+
+Resources:
+
+  # ----------------------
+  # NAT Gateway (AZ-A)
+  # ----------------------
+
+  NatEip:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-nat-eip"
+    # Elastic IP for NAT Gateway
+  
+  NatGateway:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatEip.AllocationId
+      SubnetId: !Ref PublicSubnet1a
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-nat-gateway"
+    # NAT Gateway for ECS in AvailabilityZone-A (main)
+
+  
+  # ----------------------
+  # Private Route Tables
+  # ----------------------
+
+  # -----ECS (AZ-a)-----
+  PrivateSubnet2aRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VpcId
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-ecs-private2a-rt"
+
+  PrivateSubnet2aNatRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateSubnet2aRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway
+    # Requests to internet go to the NAT Gateway
+
+  PrivateSubnet2aAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet2a
+      RouteTableId: !Ref PrivateSubnet2aRouteTable
+
+
+  # -----Database (AZ-a)-----
+  PrivateSubnet3aRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VpcId
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-db-private3a-rt"
+
+  PrivateSubnet3aAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet3a
+      RouteTableId: !Ref PrivateSubnet3aRouteTable
+
+
+  # -----Database (AZ-b)-----
+  PrivateSubnet3bRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VpcId
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-db-private3b-rt"
+
+  PrivateSubnet3bAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet3b
+      RouteTableId: !Ref PrivateSubnet3bRouteTable
+
+  
+  # ----------------------
+  # Gateway Endpoint
+  # ----------------------
+
+  S3GatewayEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref VpcId
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.s3"
+      VpcEndpointType: Gateway
+      RouteTableIds:
+        - !Ref PrivateSubnet2aRouteTable
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-s3-endpoint"
+
+
+Outputs:
+  NatGatewayId:
+    Description: NAT Gateway ID (AZ-a only)
+    Value: !Ref NatGateway
+  
+  PrivateSubnet2aRouteTable:
+    Description: Route table used by private ECS tasks in AvailabilityZone-A (main)
+    Value: !Ref PrivateSubnet2aRouteTable
+
+  PrivateSubnet3aRouteTable:
+    Description: Route table used by database in AvailabilityZone-A (main)
+    Value: !Ref PrivateSubnet3aRouteTable
+
+  PrivateSubnet3bRouteTable:
+    Description: Route table used by database in AvailabilityZone-B (backup)
+    Value: !Ref PrivateSubnet3bRouteTable
+
+  S3GatewayEndpointId:
+    Description: S3 Gateway Endpoint ID used by private ECS tasks in AvailabilityZone-A (main)
+    Value: !Ref S3GatewayEndpoint
