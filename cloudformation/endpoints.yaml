@@ -20,21 +20,29 @@ Parameters:
     Type: AWS::EC2::VPC::Id
     Description: VPC ID from network stack
 
-  PublicSubnet1a:
+  PublicAlbSubnet1a:
     Type: AWS::EC2::Subnet::Id
-    Description: Public subnet for NAT Gateway in AvailabilityZone-A (main)
+    Description: Public subnet for ALB and NAT Gateway in AvailabilityZone-A (main)
 
-  PrivateSubnet2a:
+  PrivateEcsSubnet2a:
     Type: AWS::EC2::Subnet::Id
     Description: Private subnet for ECS in AvailabilityZone-A (main)
 
-  PrivateSubnet3a:
+  PrivateDbSubnet3a:
     Type: AWS::EC2::Subnet::Id
     Description: Private subnet for Aurora in AvailabilityZone-A (main)
+
+  PublicEcsSubnet2b:
+    Type: AWS::EC2::Subnet::Id
+    Description: Public subnet for ECS in AvailabilityZone-B (backup)
   
-  PrivateSubnet3b:
+  PrivateDbSubnet3b:
     Type: AWS::EC2::Subnet::Id
     Description: Private subnet for Aurora in AvailabilityZone-B (backup)
+  
+  InternetGatewayId:
+    Type: String
+    Description: Internet Gateway Id
 
 
 Resources:
@@ -56,7 +64,7 @@ Resources:
     Type: AWS::EC2::NatGateway
     Properties:
       AllocationId: !GetAtt NatEip.AllocationId
-      SubnetId: !Ref PublicSubnet1a
+      SubnetId: !Ref PublicAlbSubnet1a
       Tags:
         - Key: Name
           Value: !Sub "${ProjectName}-${Environment}-nat-gateway"
@@ -67,8 +75,8 @@ Resources:
   # Private Route Tables
   # ----------------------
 
-  # -----ECS (AZ-a)-----
-  PrivateSubnet2aRouteTable:
+  # ECS (AZ-a)
+  PrivateEcsSubnet2aRouteTable:
     Type: AWS::EC2::RouteTable
     Properties:
       VpcId: !Ref VpcId
@@ -76,23 +84,45 @@ Resources:
         - Key: Name
           Value: !Sub "${ProjectName}-${Environment}-ecs-private2a-rt"
 
-  PrivateSubnet2aNatRoute:
+  PrivateEcsSubnet2aNatRoute:
     Type: AWS::EC2::Route
     Properties:
-      RouteTableId: !Ref PrivateSubnet2aRouteTable
+      RouteTableId: !Ref PrivateEcsSubnet2aRouteTable
       DestinationCidrBlock: 0.0.0.0/0
       NatGatewayId: !Ref NatGateway
-    # Requests to internet go to the NAT Gateway
 
-  PrivateSubnet2aAssociation:
+  PrivateEcsSubnet2aAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
-      SubnetId: !Ref PrivateSubnet2a
-      RouteTableId: !Ref PrivateSubnet2aRouteTable
+      SubnetId: !Ref PrivateEcsSubnet2a
+      RouteTableId: !Ref PrivateEcsSubnet2aRouteTable
+
+  
+  # ECS (AZ-b)
+  PublicEcsSubnet2bRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VpcId
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-ecs-public2b-rt"
+  
+  PublicEcsSubnet2bInternetRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PublicEcsSubnet2bRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGatewayId
+  
+  PublicEcsSubnet2bAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicEcsSubnet2b
+      RouteTableId: !Ref PublicEcsSubnet2bRouteTable
 
 
-  # -----Database (AZ-a)-----
-  PrivateSubnet3aRouteTable:
+  # Database (AZ-a)
+  PrivateDbSubnet3aRouteTable:
     Type: AWS::EC2::RouteTable
     Properties:
       VpcId: !Ref VpcId
@@ -100,15 +130,15 @@ Resources:
         - Key: Name
           Value: !Sub "${ProjectName}-${Environment}-db-private3a-rt"
 
-  PrivateSubnet3aAssociation:
+  PrivateDbSubnet3aAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
-      SubnetId: !Ref PrivateSubnet3a
-      RouteTableId: !Ref PrivateSubnet3aRouteTable
+      SubnetId: !Ref PrivateDbSubnet3a
+      RouteTableId: !Ref PrivateDbSubnet3aRouteTable
 
 
-  # -----Database (AZ-b)-----
-  PrivateSubnet3bRouteTable:
+  # Database (AZ-b)
+  PrivateDbSubnet3bRouteTable:
     Type: AWS::EC2::RouteTable
     Properties:
       VpcId: !Ref VpcId
@@ -116,11 +146,11 @@ Resources:
         - Key: Name
           Value: !Sub "${ProjectName}-${Environment}-db-private3b-rt"
 
-  PrivateSubnet3bAssociation:
+  PrivateDbSubnet3bAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
-      SubnetId: !Ref PrivateSubnet3b
-      RouteTableId: !Ref PrivateSubnet3bRouteTable
+      SubnetId: !Ref PrivateDbSubnet3b
+      RouteTableId: !Ref PrivateDbSubnet3bRouteTable
 
   
   # ----------------------
@@ -134,7 +164,8 @@ Resources:
       ServiceName: !Sub "com.amazonaws.${AWS::Region}.s3"
       VpcEndpointType: Gateway
       RouteTableIds:
-        - !Ref PrivateSubnet2aRouteTable
+        - !Ref PrivateEcsSubnet2aRouteTable
+        - !Ref PublicEcsSubnet2bRouteTable
       Tags:
         - Key: Name
           Value: !Sub "${ProjectName}-${Environment}-s3-endpoint"
@@ -145,18 +176,25 @@ Outputs:
     Description: NAT Gateway ID (AZ-a only)
     Value: !Ref NatGateway
   
-  PrivateSubnet2aRouteTable:
+  PrivateEcsSubnet2aRouteTable:
     Description: Route table used by private ECS tasks in AvailabilityZone-A (main)
-    Value: !Ref PrivateSubnet2aRouteTable
+    Value: !Ref PrivateEcsSubnet2aRouteTable
 
-  PrivateSubnet3aRouteTable:
+  PrivateDbSubnet3aRouteTable:
     Description: Route table used by database in AvailabilityZone-A (main)
-    Value: !Ref PrivateSubnet3aRouteTable
+    Value: !Ref PrivateDbSubnet3aRouteTable
+  
+  PublicEcsSubnet2bRouteTable:
+    Description: Route table used by public ECS tasks in AvailabilityZone-B (backup)
+    Value: !Ref PublicEcsSubnet2bRouteTable
 
-  PrivateSubnet3bRouteTable:
+  PrivateDbSubnet3bRouteTable:
     Description: Route table used by database in AvailabilityZone-B (backup)
-    Value: !Ref PrivateSubnet3bRouteTable
+    Value: !Ref PrivateDbSubnet3bRouteTable
 
   S3GatewayEndpointId:
     Description: S3 Gateway Endpoint ID used by private ECS tasks in AvailabilityZone-A (main)
     Value: !Ref S3GatewayEndpoint
+  
+  NatEip:
+    Value: !Ref NatEip

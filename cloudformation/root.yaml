@@ -10,32 +10,6 @@ Parameters:
     Description: Project name prefix for resource naming
     Default: candy-store
   
-  AvailabilityZoneA:
-    Type: String
-    Description: Availability Zone of main resources
-    Default: a
-    AllowedValues:
-      - a
-      - b
-      - c
-      - d
-      - e
-      - f
-    ConstraintDescription: "a, b, c, d, e, f"
-
-  AvailabilityZoneB:
-    Type: String
-    Description: Availability Zone of backup resources (pilot light / failover AZ)
-    Default: b
-    AllowedValues:
-      - a
-      - b
-      - c
-      - d
-      - e
-      - f
-    ConstraintDescription: "a, b, c, d, e, f"
-  
   VpcCidr:
     Type: String
     Description: The CIDR block for the VPC
@@ -70,8 +44,6 @@ Resources:
       TemplateURL: !Sub "${NestedTemplateURL}network.yaml"
       Parameters:
         ProjectName: !Ref ProjectName
-        AvailabilityZoneA: !Ref AvailabilityZoneA
-        AvailabilityZoneB: !Ref AvailabilityZoneB
         Environment: !Ref Environment
         VpcCidr: !Ref VpcCidr
     DeletionPolicy: Delete
@@ -85,15 +57,17 @@ Resources:
       TemplateURL: !Sub "${NestedTemplateURL}endpoints.yaml"
       Parameters:
         ProjectName: !Ref ProjectName
-        AvailabilityZoneA: !Ref AvailabilityZoneA
-        AvailabilityZoneB: !Ref AvailabilityZoneB
         Environment: !Ref Environment
         VpcId: !GetAtt NetworkStack.Outputs.VpcId
-        # PublicSubnet1: !GetAtt NetworkStack.Outputs.PublicSubnet1
-        # PrivateSubnet1: !GetAtt NetworkStack.Outputs.PrivateSubnet1
+        PublicAlbSubnet1a: !GetAtt NetworkStack.Outputs.PublicAlbSubnet1a
+        PrivateEcsSubnet2a: !GetAtt NetworkStack.Outputs.PrivateEcsSubnet2a
+        PrivateDbSubnet3a: !GetAtt NetworkStack.Outputs.PrivateDbSubnet3a
+        PublicEcsSubnet2b: !GetAtt NetworkStack.Outputs.PublicEcsSubnet2b
+        PrivateDbSubnet3b: !GetAtt NetworkStack.Outputs.PrivateDbSubnet3b
+        InternetGatewayId: !GetAtt NetworkStack.Outputs.InternetGatewayId
     DeletionPolicy: Delete
     UpdateReplacePolicy: Delete
-    # Nested stack for endpoints: NAT Gateway, S3 Gateway endpoints and Private Routes.
+    # Nested stack for endpoints: NAT Gateway, S3 Gateway and Private Routes.
     # Depends on the NetworkStack because it needs VPC and subnet information
 
 
@@ -103,8 +77,6 @@ Resources:
       TemplateURL: !Sub "${NestedTemplateURL}database.yaml"
       Parameters:
         ProjectName: !Ref ProjectName
-        AvailabilityZoneA: !Ref AvailabilityZoneA
-        AvailabilityZoneB: !Ref AvailabilityZoneB
         Environment: !Ref Environment
         VpcId: !GetAtt NetworkStack.Outputs.VpcId
         # PrivateSubnet1: !GetAtt NetworkStack.Outputs.PrivateSubnet1
@@ -121,8 +93,6 @@ Resources:
       TemplateURL: !Sub "${NestedTemplateURL}compute.yaml"
       Parameters:
         ProjectName: !Ref ProjectName
-        AvailabilityZoneA: !Ref AvailabilityZoneA
-        AvailabilityZoneB: !Ref AvailabilityZoneB
         Environment: !Ref Environment
         VpcId: !GetAtt NetworkStack.Outputs.VpcId
         # PublicSubnet1: !GetAtt NetworkStack.Outputs.PublicSubnet1
@@ -142,8 +112,6 @@ Resources:
       TemplateURL: !Sub "${NestedTemplateURL}edge.yaml"
       Parameters:
         ProjectName: !Ref ProjectName
-        AvailabilityZoneA: !Ref AvailabilityZoneA
-        AvailabilityZoneB: !Ref AvailabilityZoneB
         Environment: !Ref Environment
         AlbDnsName: !GetAtt ComputeStack.Outputs.AlbDnsName
         S3BucketName: !GetAtt ComputeStack.Outputs.StaticContentBucket
