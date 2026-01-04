@@ -44,7 +44,7 @@ Parameters:
   
   InternetGatewayId:
     Type: String
-    Description: Internet Gateway Id
+    Description: Internet Gateway Id (igw-xxxxxxxx)
 
 
 Resources:
@@ -74,7 +74,7 @@ Resources:
 
   
   # ----------------------
-  # Private Route Tables
+  # Route Tables
   # ----------------------
 
   # ECS (AZ-a)
@@ -171,6 +171,10 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub "${ProjectName}-${Environment}-s3-endpoint"
+    # Allows ECS tasks to access S3 without traversing the NAT Gateway
+    # Reduces cost and keeps traffic within AWS backbone
+    # Attached to public ECS route table so pilot-light tasks
+    # can access S3 without NAT during AZ-A failover
 
 
 Outputs:
@@ -178,25 +182,6 @@ Outputs:
     Description: NAT Gateway ID (AZ-a only)
     Value: !Ref NatGateway
   
-  PrivateEcsSubnet2aRouteTable:
-    Description: Route table used by private ECS tasks in AvailabilityZone-A (main)
-    Value: !Ref PrivateEcsSubnet2aRouteTable
-
-  PrivateDbSubnet3aRouteTable:
-    Description: Route table used by database in AvailabilityZone-A (main)
-    Value: !Ref PrivateDbSubnet3aRouteTable
-  
-  PublicEcsSubnet2bRouteTable:
-    Description: Route table used by public ECS tasks in AvailabilityZone-B (backup)
-    Value: !Ref PublicEcsSubnet2bRouteTable
-
-  PrivateDbSubnet3bRouteTable:
-    Description: Route table used by database in AvailabilityZone-B (backup)
-    Value: !Ref PrivateDbSubnet3bRouteTable
-
-  S3GatewayEndpointId:
-    Description: S3 Gateway Endpoint ID used by private ECS tasks in AvailabilityZone-A (main)
-    Value: !Ref S3GatewayEndpoint
-  
   NatEip:
+    Description: NAT Gateway Elastic IP (AZ-a only)
     Value: !Ref NatEip

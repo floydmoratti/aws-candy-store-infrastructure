@@ -35,19 +35,24 @@ Parameters:
   PublicEcsSubnet2b:
     Type: AWS::EC2::Subnet::Id
     Description: Public subnet for ECS in AvailabilityZone-B (backup)
-  
+
+  DesiredCount:
+    Type: Number
+    Description: Desired count for main ECS service.
+    Default: 1  # Delete Default
+
   BackupDesiredCount:
     Type: Number
     Description: Desired count for pilot light ECS service. Can be updated by Step Functions or manually.
     Default: 0  # Delete Default
   
-  AuroraWriterEndpoint:
-    Type: String
-    Description: Aurora writer endpoint
-  
   DatabaseSecretArn:
     Type: String
     Description: ARN of Secrets Manager secret for DB credentials
+  
+  DbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup::Id
+    Description: Database Security Group Id
 
   ContainerName:
     Type: String
@@ -133,17 +138,12 @@ Resources:
     Properties:
       GroupDescription: Security group for ALB
       VpcId: !Ref VpcId
-      # Inbound: Internet HTTPS only
-      SecurityGroupIngress:
-        - IpProtocol: tcp
-          FromPort: 443
-          ToPort: 443
-          CidrIp: 0.0.0.0/0
       Tags:
         - Key: Name
-          Value: !Sub "${ProjectName}-${Environment}-alb-sg" 
-
-  AlbEgressRule:
+          Value: !Sub "${ProjectName}-${Environment}-alb-sg"
+      # Ingress rule: HTTPS from CloudFront only added in edge.yaml
+      
+  AlbToEcsEgressRule:
     Type: AWS::EC2::SecurityGroupEgress
     Properties:
       GroupId: !Ref AlbSecurityGroup
@@ -153,22 +153,17 @@ Resources:
       DestinationSecurityGroupId: !Ref EcsSecurityGroup
       # Rule for ALB. Outbound traffic only HTTP to ECS
 
+
   EcsSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Security group for ECS tasks
       VpcId: !Ref VpcId
-      # Outbound: HTTPS only to Internet
-      SecurityGroupEgress:
-        - IpProtocol: tcp
-          FromPort: 443
-          ToPort: 443
-          CidrIp: 0.0.0.0/0
       Tags:
         - Key: Name
           Value: !Sub "${ProjectName}-${Environment}-ecs-sg"
   
-  EcsIngressRule:
+  EcsFromAlbIngressRule:
     Type: AWS::EC2::SecurityGroupIngress
     Properties:
       GroupId: !Ref EcsSecurityGroup
@@ -177,6 +172,37 @@ Resources:
       ToPort: 80
       SourceSecurityGroupId: !Ref AlbSecurityGroup
       # Rule for ECS. Inbound traffic only HTTP from ALB
+  
+  EcsToNetEgressRule:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      GroupId: !Ref EcsSecurityGroup
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      CidrIp: 0.0.0.0/0
+      # Rule for ECS. Outbound traffic to internet only in HTTPS
+  
+  EcsToDbEgressRule:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      GroupId: !Ref EcsSecurityGroup
+      IpProtocol: tcp
+      FromPort: 5432
+      ToPort: 5432
+      DestinationSecurityGroupId: !Ref DbSecurityGroup
+      # Rule for ECS. Outbound traffic to Database only on Port 5432
+  
+
+  DbFromEcsIngressRule:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref DbSecurityGroup
+      IpProtocol: tcp
+      FromPort: 5432
+      ToPort: 5432
+      SourceSecurityGroupId: !Ref EcsSecurityGroup
+      # Rule for Aurora. Inbound traffic only from ECS Security Group
 
 
   # ----------------------
@@ -266,14 +292,17 @@ Resources:
       TaskRoleArn: !Ref EcsTaskRole
       ContainerDefinitions: 
         - Name: !Ref ContainerName
+          Essential: true
           Image: !Sub "${EcrRepositoryUri}:${ContainerVersion}"
+          Cpu: "256"
+          Memory: "512"
           PortMappings:
             - ContainerPort: 80
-          Environment:
-            - Name: DATABASE_ENDPOINT
-              Value: !Ref AuroraWriterEndpoint
-            - Name: DATABASE_SECRET_ARN
-              Value: !Ref DatabaseSecretArn
+          Secrets:
+            - Name: DATABASE_USERNAME
+              ValueFrom: !Sub "${DatabaseSecretArn}:username"
+            - Name: DATABASE_PASSWORD
+              ValueFrom: !Sub "${DatabaseSecretArn}:password"
           LogConfiguration:
             LogDriver: awslogs
             Options:
@@ -293,8 +322,10 @@ Resources:
       DeploymentController:
         Type: ECS
       TaskDefinition: !Ref EcsTaskDefinition
-      DesiredCount: 1
+      DesiredCount: !Ref DesiredCount
       DeploymentConfiguration:
+        MinimumHealthyPercent: 50
+        MaximumPercent: 200
         DeploymentCircuitBreaker:
           Enable: true
           Rollback: true
@@ -328,6 +359,8 @@ Resources:
       TaskDefinition: !Ref EcsTaskDefinition
       DesiredCount: !Ref BackupDesiredCount  # pilot light service
       DeploymentConfiguration:
+        MinimumHealthyPercent: 50
+        MaximumPercent: 200
         DeploymentCircuitBreaker:
           Enable: true
           Rollback: true
@@ -360,3 +393,17 @@ Resources:
     DeletionPolicy: Delete
     UpdateReplacePolicy: Delete
     # Uses AWS-managed KMS key for CloudWatch Logs encryption
+
+
+Outputs:
+  AlbDnsName:
+    Value: !GetAtt Alb.DNSName
+  
+  AlbArn:
+    Value: !GetAtt Alb.LoadBalancerArn
+  
+  AlbMainTargetGroupArn:
+    Value: !GetAtt AlbMainTargetGroup.TargetGroupArn
+  
+  AlbBackupTargetGroupArn:
+    Value: !GetAtt AlbBackupTargetGroup.TargetGroupArn

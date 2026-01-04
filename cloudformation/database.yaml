@@ -28,14 +28,6 @@ Parameters:
     Type: AWS::EC2::Subnet::Id
     Description: Private subnet for Aurora in AvailabilityZone-B (backup)
 
-  PrivateEcsSubnet2aCidr:
-    Type: String
-    Description: CIDR of private ECS subnet (AZ-a)
-
-  PublicEcsSubnet2bCidr:
-    Type: String
-    Description: CIDR of public ECS subnet (AZ-b)
-
 
 Resources:
 
@@ -48,18 +40,10 @@ Resources:
     Properties:
       GroupDescription: Access to Aurora Serverless v2 cluster from ECS subnets only
       VpcId: !Ref VpcId
-      SecurityGroupIngress:
-        - IpProtocol: tcp
-          FromPort: 5432
-          ToPort: 5432
-          CidrIp: !Ref PrivateEcsSubnet2aCidr
-        - IpProtocol: tcp
-          FromPort: 5432
-          ToPort: 5432
-          CidrIp: !Ref PublicEcsSubnet2bCidr
       Tags:
         - Key: Name
           Value: !Sub "${ProjectName}-${Environment}-aurora-sg"
+      # Ingress rule added in ComputeStack to allow ECS access
 
 
   # ----------------------
@@ -100,22 +84,45 @@ Resources:
     Type: AWS::RDS::DBCluster
     Properties:
       Engine: aurora-postgresql
-      EngineMode: serverless
+      # EngineVersion: 17.7
       DatabaseName: !Sub "${ProjectName}-${Environment}-db"
       MasterUsername: !Sub "{{resolve:secretsmanager:${DatabaseSecret}:SecretString:username}}"
       MasterUserPassword: !Sub "{{resolve:secretsmanager:${DatabaseSecret}:SecretString:password}}"
       DBSubnetGroupName: !Ref AuroraSubnetGroup
       VpcSecurityGroupIds:
         - !Ref DbSecurityGroup
-      BackupRetentionPeriod: 3
-      ScalingConfiguration:
-        AutoPause: true
+      BackupRetentionPeriod: 7
+      ServerlessV2ScalingConfiguration:
         MinCapacity: 0.5
         MaxCapacity: 0.5
-        SecondsUntilAutoPause: 30
+      # DeletionProtection: true
       Tags:
         - Key: Name
           Value: !Sub "${ProjectName}-${Environment}-aurora-cluster"
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+  
+  AuroraWriterInstance:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBClusterIdentifier: !Ref AuroraCluster
+      DBInstanceClass: db.serverless
+      Engine: aurora-postgresql
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      PubliclyAccessible: false
+      AutoMinorVersionUpgrade: true
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+  
+  AuroraReaderInstance:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBClusterIdentifier: !Ref AuroraCluster
+      DBInstanceClass: db.serverless
+      Engine: aurora-postgresql
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      PubliclyAccessible: false
+      AutoMinorVersionUpgrade: true
     DeletionPolicy: Delete
     UpdateReplacePolicy: Delete
 
@@ -133,3 +140,7 @@ Outputs:
   DatabaseSecretArn:
     Description: Secrets Manager ARN for database credentials
     Value: !Ref DatabaseSecret
+  
+  DbSecurityGroup:
+    Description: Database Security Group
+    Value: !Ref DbSecurityGroup

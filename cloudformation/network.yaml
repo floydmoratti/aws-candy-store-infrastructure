@@ -211,11 +211,3 @@ Outputs:
   InternetGatewayId:
     Description: Internet Gateway Id
     Value: !Ref InternetGateway
-  
-  PrivateEcsSubnet2aCidr:
-    Description: CIDR of private ECS subnet (AZ-a)
-    Value: !GetAtt PrivateEcsSubnet2a.CidrBlock
-
-  PublicEcsSubnet2bCidr:
-    Description: CIDR of public ECS subnet (AZ-b)
-    Value: !GetAtt PublicEcsSubnet2b.CidrBlock

@@ -48,6 +48,11 @@ Parameters:
       Can be Github (https://raw.githubusercontent.com/YOUR_GITHUB_USERNAME/YOUR_REPO_NAME/main/cloudformation/) or S3 (https://BUCKET_NAME.s3.amazonaws.com/)
     Default: https://raw.githubusercontent.com/floydmoratti/aws-ecommerce-infrastructure/dev/cloudformation/
 
+  DesiredCount:
+    Type: Number
+    Description: Desired count for main ECS service.
+    Default: 0
+
   BackupDesiredCount:
     Type: Number
     Description: Desired count for pilot light ECS service. Can be updated by Step Functions or manually.
@@ -71,6 +76,7 @@ Resources:
     DeletionPolicy: Delete
     UpdateReplacePolicy: Delete
     # Nested stack for network resources: VPC, subnets, routes, and Internet Gateway.
+    # Resources are deleted on stack removal to avoid ongoing demo costs
   
 
   EndpointsStack:
@@ -103,8 +109,6 @@ Resources:
         VpcId: !GetAtt NetworkStack.Outputs.VpcId
         PrivateDbSubnet3a: !GetAtt NetworkStack.Outputs.PrivateDbSubnet3a
         PrivateDbSubnet3b: !GetAtt NetworkStack.Outputs.PrivateDbSubnet3b
-        PrivateEcsSubnet2aCidr: !GetAtt NetworkStack.Outputs.PrivateEcsSubnet2aCidr
-        PublicEcsSubnet2bCidr: !GetAtt NetworkStack.Outputs.PublicEcsSubnet2bCidr
     DeletionPolicy: Delete
     UpdateReplacePolicy: Delete
     # Nested stack for the Aurora Serverless database
@@ -123,8 +127,9 @@ Resources:
         PrivateEcsSubnet2a: !GetAtt NetworkStack.Outputs.PrivateEcsSubnet2a
         PublicAlbSubnet1b: !GetAtt NetworkStack.Outputs.PublicAlbSubnet1b
         PublicEcsSubnet2b: !GetAtt NetworkStack.Outputs.PublicEcsSubnet2b
-        AuroraWriterEndpoint: !GetAtt DatabaseStack.Outputs.AuroraWriterEndpoint
         DatabaseSecretArn: !GetAtt DatabaseStack.Outputs.DatabaseSecretArn
+        DbSecurityGroup: !GetAtt DatabaseStack.Outputs.DbSecurityGroup
+        DesiredCount: !Ref DesiredCount
         BackupDesiredCount: !Ref BackupDesiredCount
         ContainerName: !Ref ContainerName
         ContainerVersion: !Ref ContainerVersion
