@@ -22,9 +22,9 @@ Parameters:
     Type: AWS::EC2::VPC::Id
     Description: VPC ID from network stack
 
-  PublicAlbSubnet1a:
-    Type: AWS::EC2::Subnet::Id
-    Description: Public subnet for ALB and NAT Gateway in AvailabilityZone-A (main)
+  # PublicAlbSubnet1a:
+  #   Type: AWS::EC2::Subnet::Id
+  #   Description: Public subnet for ALB and NAT Gateway in AvailabilityZone-A (main)
 
   PrivateEcsSubnet2a:
     Type: AWS::EC2::Subnet::Id
@@ -49,37 +49,38 @@ Parameters:
 
 Resources:
 
-  # ----------------------
-  # NAT Gateway (AZ-A)
-  # ----------------------
+################################ ORIGINAL CODE ################################
+  # # ----------------------
+  # # NAT Gateway (AZ-A)
+  # # ----------------------
 
-  NatEip:
-    Type: AWS::EC2::EIP
-    Properties:
-      Domain: vpc
-      Tags:
-        - Key: Name
-          Value: !Sub "${ProjectName}-${Environment}-nat-eip"
-        - Key: Project
-          Value: !Ref ProjectName
-        - Key: Environment
-          Value: !Ref Environment
-    # Elastic IP for NAT Gateway
+  # NatEip:
+  #   Type: AWS::EC2::EIP
+  #   Properties:
+  #     Domain: vpc
+  #     Tags:
+  #       - Key: Name
+  #         Value: !Sub "${ProjectName}-${Environment}-nat-eip"
+  #       - Key: Project
+  #         Value: !Ref ProjectName
+  #       - Key: Environment
+  #         Value: !Ref Environment
+  #   # Elastic IP for NAT Gateway
   
-  NatGateway:
-    Type: AWS::EC2::NatGateway
-    Properties:
-      AllocationId: !GetAtt NatEip.AllocationId
-      SubnetId: !Ref PublicAlbSubnet1a
-      Tags:
-        - Key: Name
-          Value: !Sub "${ProjectName}-${Environment}-nat-gateway"
-        - Key: Project
-          Value: !Ref ProjectName
-        - Key: Environment
-          Value: !Ref Environment
-    # NAT Gateway for ECS in AvailabilityZone-A (main)
-
+  # NatGateway:
+  #   Type: AWS::EC2::NatGateway
+  #   Properties:
+  #     AllocationId: !GetAtt NatEip.AllocationId
+  #     SubnetId: !Ref PublicAlbSubnet1a
+  #     Tags:
+  #       - Key: Name
+  #         Value: !Sub "${ProjectName}-${Environment}-nat-gateway"
+  #       - Key: Project
+  #         Value: !Ref ProjectName
+  #       - Key: Environment
+  #         Value: !Ref Environment
+  #   # NAT Gateway for ECS in AvailabilityZone-A (main)
+################################ ORIGINAL CODE ################################
   
   # ----------------------
   # Route Tables
@@ -98,12 +99,24 @@ Resources:
         - Key: Environment
           Value: !Ref Environment
 
+################################ TESTING CODE ################################
   PrivateEcsSubnet2aNatRoute:
     Type: AWS::EC2::Route
     Properties:
       RouteTableId: !Ref PrivateEcsSubnet2aRouteTable
       DestinationCidrBlock: 0.0.0.0/0
-      NatGatewayId: !Ref NatGateway
+      NatGatewayId: !Ref InternetGatewayId
+    # Changed to public internet access for testing
+################################ TESTING CODE ################################
+
+################################ ORIGINAL CODE ################################
+  # PrivateEcsSubnet2aNatRoute:
+  #   Type: AWS::EC2::Route
+  #   Properties:
+  #     RouteTableId: !Ref PrivateEcsSubnet2aRouteTable
+  #     DestinationCidrBlock: 0.0.0.0/0
+  #     NatGatewayId: !Ref NatGateway
+################################ ORIGINAL CODE ################################
 
   PrivateEcsSubnet2aAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
@@ -207,11 +220,11 @@ Resources:
     # can access S3 without NAT during AZ-A failover
 
 
-Outputs:
-  NatGatewayId:
-    Description: NAT Gateway ID (AZ-a only)
-    Value: !Ref NatGateway
+# Outputs:
+#   NatGatewayId:
+#     Description: NAT Gateway ID (AZ-a only)
+#     Value: !Ref NatGateway
   
-  NatEip:
-    Description: NAT Gateway Elastic IP (AZ-a only)
-    Value: !Ref NatEip
+#   NatEip:
+#     Description: NAT Gateway Elastic IP (AZ-a only)
+#     Value: !Ref NatEip

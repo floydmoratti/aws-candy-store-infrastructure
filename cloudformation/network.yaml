@@ -87,7 +87,9 @@ Resources:
         - Key: Environment
           Value: !Ref Environment
     # Public Subnet for ALB and NAT Gateway (main)
-  
+
+
+################################ TESTING CODE ################################
   PrivateEcsSubnet2a:
     Type: AWS::EC2::Subnet
     Properties:
@@ -96,7 +98,7 @@ Resources:
       AvailabilityZone: !Select
         - 0
         - !GetAZs ""
-      MapPublicIpOnLaunch: false
+      MapPublicIpOnLaunch: true
       Tags:
         - Key: Name
           Value: !Sub "${ProjectName}-${Environment}-ecs-private-subnet-2a"
@@ -104,7 +106,28 @@ Resources:
           Value: !Ref ProjectName
         - Key: Environment
           Value: !Ref Environment
-    # Private Subnet for ECS (main)
+    # Private Subnet for ECS (main) --> Set to Public for testing
+################################ TESTING CODE ################################
+
+################################ ORIGINAL CODE ################################
+  # PrivateEcsSubnet2a:
+  #   Type: AWS::EC2::Subnet
+  #   Properties:
+  #     VpcId: !Ref VPC
+  #     CidrBlock: !Select [1, !Cidr [!Ref VpcCidr, 6, 6]]
+  #     AvailabilityZone: !Select
+  #       - 0
+  #       - !GetAZs ""
+  #     MapPublicIpOnLaunch: false
+  #     Tags:
+  #       - Key: Name
+  #         Value: !Sub "${ProjectName}-${Environment}-ecs-private-subnet-2a"
+  #       - Key: Project
+  #         Value: !Ref ProjectName
+  #       - Key: Environment
+  #         Value: !Ref Environment
+  #   # Private Subnet for ECS (main)
+################################ ORIGINAL CODE ################################
 
   PrivateDbSubnet3a:
     Type: AWS::EC2::Subnet
@@ -123,6 +146,7 @@ Resources:
         - Key: Environment
           Value: !Ref Environment
     # Private Subnet for Aurora (main)
+
 
   PublicAlbSubnet1b:  
     Type: AWS::EC2::Subnet
