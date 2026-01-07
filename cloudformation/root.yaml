@@ -11,6 +11,19 @@ Parameters:
     Type: String
     Description: Project name prefix for resource naming
     Default: candy-store
+  
+  DatabaseName:
+    Type: String
+    Description: >
+      Initial database name (lowercase, letters/numbers/underscores only).
+      Must start with a letter.
+    MinLength: 1
+    MaxLength: 55
+    AllowedPattern: "^[a-z][a-z0-9_]*$"
+    ConstraintDescription: >
+      Database name must start with a lowercase letter and contain only
+      lowercase letters, numbers, and underscores.
+    Default: candy_store
 
   ContainerName:
     Type: String
@@ -25,6 +38,10 @@ Parameters:
   EcrRepositoryUri:
     Type: String
     Description: URI of ECR Repository
+
+  WebsiteBucketName:
+    Type: String
+    Description: Name of S3 bucket hosting static website
   
   VpcCidr:
     Type: String
@@ -41,12 +58,18 @@ Parameters:
       - dev
       - prod
   
-  NestedTemplateURL:
+  TemplatesBaseUrl:
     Type: String
     Description: >
       URL of root directory where the nested stack templates are stored (network.yaml, endpoints.yaml, compute.yaml, database.yaml, edge.yaml)
-      Can be Github (https://raw.githubusercontent.com/YOUR_GITHUB_USERNAME/YOUR_REPO_NAME/main/cloudformation/) or S3 (https://BUCKET_NAME.s3.amazonaws.com/)
-    Default: https://raw.githubusercontent.com/floydmoratti/aws-ecommerce-infrastructure/dev/cloudformation/
+      Can be Github (https://raw.githubusercontent.com/YOUR_GITHUB_USERNAME/YOUR_REPO_NAME/main/cloudformation) or S3 (https://BUCKET_NAME.s3.amazonaws.com)
+      Note: Do not include trailing slash "/"
+    Default: https://raw.githubusercontent.com/floydmoratti/aws-ecommerce-infrastructure/dev/cloudformation
+
+  AuroraEngineVersion:
+    Type: String
+    Description: Aurora PostgreSQL major version
+    Default: "15.4"  # Delete Default
 
   DesiredCount:
     Type: Number
@@ -57,6 +80,33 @@ Parameters:
     Type: Number
     Description: Desired count for pilot light ECS service. Can be updated by Step Functions or manually.
     Default: 0
+  
+  EcsLogRetention:
+    Type: Number
+    Description: How many days to keep logs from ECS tasks
+    Default: 30
+
+  DomainName:
+    Type: String
+    Description: Root domain for the website (e.g. example.com)
+    Default: floydmoratti.website  # Delete Default
+
+  HostedZoneId:
+    Type: String
+    Description: Route 53 Hosted Zone ID for website domain
+  
+  CloudFrontAcmCertificateArn:
+    Type: String
+    Description: >
+      ARN of ACM certificate for CloudFront HTTPS (WARNING must be generated in region us-east-1).
+  
+  EnableWaf:
+    Type: String
+    AllowedValues:
+      - true
+      - false
+    Description: Whether to enable AWS WAF for CloudFront
+    Default: false  # Delete Default
 
 
 Resources:
@@ -68,11 +118,18 @@ Resources:
   NetworkStack:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: !Sub "${NestedTemplateURL}network.yaml"
+      TemplateURL: !Sub "${TemplatesBaseUrl}/network.yaml"
       Parameters:
         ProjectName: !Ref ProjectName
         Environment: !Ref Environment
         VpcCidr: !Ref VpcCidr
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-network-stack"
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
     DeletionPolicy: Delete
     UpdateReplacePolicy: Delete
     # Nested stack for network resources: VPC, subnets, routes, and Internet Gateway.
@@ -82,7 +139,7 @@ Resources:
   EndpointsStack:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: !Sub "${NestedTemplateURL}endpoints.yaml"
+      TemplateURL: !Sub "${TemplatesBaseUrl}/endpoints.yaml"
       Parameters:
         ProjectName: !Ref ProjectName
         Environment: !Ref Environment
@@ -93,6 +150,13 @@ Resources:
         PublicEcsSubnet2b: !GetAtt NetworkStack.Outputs.PublicEcsSubnet2b
         PrivateDbSubnet3b: !GetAtt NetworkStack.Outputs.PrivateDbSubnet3b
         InternetGatewayId: !GetAtt NetworkStack.Outputs.InternetGatewayId
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-endpoints-stack"
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
     DeletionPolicy: Delete
     UpdateReplacePolicy: Delete
     # Nested stack for endpoints: NAT Gateway, S3 Gateway and Private Routes.
@@ -102,13 +166,22 @@ Resources:
   DatabaseStack:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: !Sub "${NestedTemplateURL}database.yaml"
+      TemplateURL: !Sub "${TemplatesBaseUrl}/database.yaml"
       Parameters:
         ProjectName: !Ref ProjectName
+        DatabaseName: !Ref DatabaseName
         Environment: !Ref Environment
         VpcId: !GetAtt NetworkStack.Outputs.VpcId
         PrivateDbSubnet3a: !GetAtt NetworkStack.Outputs.PrivateDbSubnet3a
         PrivateDbSubnet3b: !GetAtt NetworkStack.Outputs.PrivateDbSubnet3b
+        AuroraEngineVersion: !Ref AuroraEngineVersion
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-database-stack"
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
     DeletionPolicy: Delete
     UpdateReplacePolicy: Delete
     # Nested stack for the Aurora Serverless database
@@ -118,7 +191,7 @@ Resources:
   ComputeStack:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: !Sub "${NestedTemplateURL}compute.yaml"
+      TemplateURL: !Sub "${TemplatesBaseUrl}/compute.yaml"
       Parameters:
         ProjectName: !Ref ProjectName
         Environment: !Ref Environment
@@ -131,24 +204,48 @@ Resources:
         DbSecurityGroup: !GetAtt DatabaseStack.Outputs.DbSecurityGroup
         DesiredCount: !Ref DesiredCount
         BackupDesiredCount: !Ref BackupDesiredCount
+        EcsLogRetention: !Ref EcsLogRetention
         ContainerName: !Ref ContainerName
         ContainerVersion: !Ref ContainerVersion
         EcrRepositoryUri: !Ref EcrRepositoryUri
+        AuroraDatabaseName: !GetAtt DatabaseStack.Outputs.AuroraDatabaseName
+        AuroraWriterEndpoint: !GetAtt DatabaseStack.Outputs.AuroraWriterEndpoint
+        DomainName: !Ref DomainName
+        HostedZoneId: !Ref HostedZoneId
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-compute-stack"
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
     DeletionPolicy: Delete
     UpdateReplacePolicy: Delete
     # Nested stack for ECS compute resources, ALB, IAM roles, and Secrets Manager
-    # Depends on NetworkStack, DatabaseStack, and EndpointsStack
+    # Depends on NetworkStack, DatabaseStack
 
 
   EdgeStack:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: !Sub "${NestedTemplateURL}edge.yaml"
+      TemplateURL: !Sub "${TemplatesBaseUrl}/edge.yaml"
       Parameters:
         ProjectName: !Ref ProjectName
         Environment: !Ref Environment
         AlbDnsName: !GetAtt ComputeStack.Outputs.AlbDnsName
-        S3BucketName: !GetAtt ComputeStack.Outputs.StaticContentBucket
+        WebsiteBucketName: !Ref WebsiteBucketName
+        DomainName: !Ref DomainName
+        HostedZoneId: !Ref HostedZoneId
+        AlbHostedZoneId: !GetAtt ComputeStack.Outputs.AlbHostedZoneId
+        CloudFrontAcmCertificateArn: !Ref CloudFrontAcmCertificateArn
+        EnableWaf: !Ref EnableWaf
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-edge-stack"
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
     DeletionPolicy: Delete
     UpdateReplacePolicy: Delete
     # Nested stack for CloudFront and S3 static content distribution
@@ -156,6 +253,10 @@ Resources:
 
 
 Outputs:
+
+  VpcId:
+    Description: Id of VPC
+    Value: !GetAtt NetworkStack.Outputs.VpcId
 
   NetworkStackId:
     Description: Stack ID of the network resources
@@ -172,3 +273,11 @@ Outputs:
   EdgeStackId:
     Description: Stack ID of the edge resources
     Value: !Ref EdgeStack
+
+  DomainName:
+    Description: Root domain for the website (e.g. example.com)
+    Value: !Ref DomainName
+
+  HostedZoneId:
+    Description: Route 53 Hosted Zone ID for website domain
+    Value: !Ref HostedZoneId

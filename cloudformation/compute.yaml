@@ -46,6 +46,11 @@ Parameters:
     Description: Desired count for pilot light ECS service. Can be updated by Step Functions or manually.
     Default: 0  # Delete Default
   
+  EcsLogRetention:
+    Type: Number
+    Description: How many days to keep logs from ECS tasks
+    Default: 30  # Delete Default
+  
   DatabaseSecretArn:
     Type: String
     Description: ARN of Secrets Manager secret for DB credentials
@@ -67,6 +72,27 @@ Parameters:
   EcrRepositoryUri:
     Type: String
     Description: URI of ECR Repository
+  
+  AuroraDatabaseName:
+    Type: String
+    Description: Aurora database name
+
+  AuroraWriterEndpoint:
+    Type: String
+    Description: Aurora database writer endpoint
+
+  DomainName:
+    Type: String
+    Description: Root domain for the website (e.g. example.com)
+    Default: floydmoratti.website  # Delete Default
+
+  HostedZoneId:
+    Type: String
+    Description: Route 53 Hosted Zone ID for website domain
+
+
+Conditions:
+  IsProd: !Equals [!Ref Environment, prod]
 
 
 Resources:
@@ -79,6 +105,13 @@ Resources:
     Type: AWS::ECS::Cluster
     Properties:
       ClusterName: !Sub "${ProjectName}-${Environment}-ecs-cluster"
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-ecs-cluster"
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
   
 
   # ----------------------
@@ -95,11 +128,25 @@ Resources:
             Principal:
               Service: ecs-tasks.amazonaws.com
             Action: sts:AssumeRole
+      Policies:
+        - PolicyName: !Sub "${ProjectName}-${Environment}-ecs-execution-policy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: SecretsManagerReadAccess
+                Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: !Ref DatabaseSecretArn
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
       Tags:
         - Key: Name
           Value: !Sub "${ProjectName}-${Environment}-ecs-execution-role"
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
 
   EcsTaskRole:
     Type: AWS::IAM::Role
@@ -112,21 +159,25 @@ Resources:
               Service: ecs-tasks.amazonaws.com
             Action: sts:AssumeRole
       Policies:
-        - PolicyName: !Sub "${ProjectName}-${Environment}-ecs-task-policy"
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Sid: SecretsManagerReadAccess
-                Effect: Allow
-                Action:
-                  - secretsmanager:GetSecretValue
-                Resource: !Ref DatabaseSecretArn
+      #  - PolicyName: !Sub "${ProjectName}-${Environment}-ecs-task-policy"
+      #    PolicyDocument:
+      #      Version: "2012-10-17"
+      #      Statement:
+      #        - Sid: Unnamed
+      #          Effect: Allow
+      #          Action:
+      #            - secretsmanager:GetSecretValue
+      #          Resource: !Ref DatabaseSecretArn
       # ManagedPolicyArns:
       #   - arn:aws:iam::aws:policy/AmazonRDSFullAccess
       #   - arn:aws:iam::aws:policy/SecretsManagerReadWrite
       Tags:
         - Key: Name
           Value: !Sub "${ProjectName}-${Environment}-ecs-task-role"
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
 
 
   # ----------------------
@@ -141,7 +192,30 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub "${ProjectName}-${Environment}-alb-sg"
-      # Ingress rule: HTTPS from CloudFront only added in edge.yaml
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+
+  AlbFromHTTPSIngressRule:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref AlbSecurityGroup
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      CidrIp: 0.0.0.0/0
+      # Ingress rule: HTTPS from Internet
+
+  AlbFromHTTPIngressRule:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref AlbSecurityGroup
+      IpProtocol: tcp
+      FromPort: 80
+      ToPort: 80
+      CidrIp: 0.0.0.0/0
+      # Ingress rule: HTTP from Internet
       
   AlbToEcsEgressRule:
     Type: AWS::EC2::SecurityGroupEgress
@@ -151,7 +225,7 @@ Resources:
       FromPort: 80
       ToPort: 80
       DestinationSecurityGroupId: !Ref EcsSecurityGroup
-      # Rule for ALB. Outbound traffic only HTTP to ECS
+      # Egress rule: Outbound traffic from ALB to ECS as HTTP only
 
 
   EcsSecurityGroup:
@@ -162,6 +236,10 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub "${ProjectName}-${Environment}-ecs-sg"
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
   
   EcsFromAlbIngressRule:
     Type: AWS::EC2::SecurityGroupIngress
@@ -171,7 +249,7 @@ Resources:
       FromPort: 80
       ToPort: 80
       SourceSecurityGroupId: !Ref AlbSecurityGroup
-      # Rule for ECS. Inbound traffic only HTTP from ALB
+      # Ingress rule: HTTP from ALB to ECS only
   
   EcsToNetEgressRule:
     Type: AWS::EC2::SecurityGroupEgress
@@ -181,7 +259,7 @@ Resources:
       FromPort: 443
       ToPort: 443
       CidrIp: 0.0.0.0/0
-      # Rule for ECS. Outbound traffic to internet only in HTTPS
+      # Egress rule: Outbound traffic from ECS to Internet as HTTPS only
   
   EcsToDbEgressRule:
     Type: AWS::EC2::SecurityGroupEgress
@@ -191,7 +269,7 @@ Resources:
       FromPort: 5432
       ToPort: 5432
       DestinationSecurityGroupId: !Ref DbSecurityGroup
-      # Rule for ECS. Outbound traffic to Database only on Port 5432
+      # Egress rule: Outbound traffic from ECS to Database on Port 5432 only
   
 
   DbFromEcsIngressRule:
@@ -202,8 +280,37 @@ Resources:
       FromPort: 5432
       ToPort: 5432
       SourceSecurityGroupId: !Ref EcsSecurityGroup
-      # Rule for Aurora. Inbound traffic only from ECS Security Group
+      # Ingress rule: Port 5432 from ECS to Database only
 
+
+  # ----------------------
+  # ACM Certificate (for ALB)
+  # ----------------------
+
+  ApiAcmCertificate:
+    Type: AWS::CertificateManager::Certificate
+    Properties:
+      DomainName:
+        Fn::If:
+          - IsProd
+          - !Sub "api.${DomainName}"
+          - !Sub "api.${Environment}.${DomainName}"
+      ValidationMethod: DNS
+      DomainValidationOptions:
+        - DomainName:
+            Fn::If:
+              - IsProd
+              - !Sub "api.${DomainName}"
+              - !Sub "api.${Environment}.${DomainName}"
+          HostedZoneId: !Ref HostedZoneId
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-alb-api-cert"
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+      
 
   # ----------------------
   # Application Load Balancer
@@ -222,6 +329,10 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub "${ProjectName}-${Environment}-alb"
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
   
   AlbMainTargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
@@ -239,6 +350,10 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub "${ProjectName}-${Environment}-main-tg"
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
 
   AlbBackupTargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
@@ -256,22 +371,41 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub "${ProjectName}-${Environment}-backup-tg"
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
 
   AlbListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref Alb
+      Port: 443
+      Protocol: HTTPS
+      Certificates:
+        - CertificateArn: !Ref ApiAcmCertificate
+      DefaultActions:
+        - Type: forward
+          ForwardConfig:
+            TargetGroups:
+              - TargetGroupArn: !Ref AlbMainTargetGroup
+                Weight: 100  # Main AZ-A traffic
+              - TargetGroupArn: !Ref AlbBackupTargetGroup
+                Weight: 0    # Pilot light AZ-B (Step Functions will adjust)
+  
+  AlbHttpListener:
     Type: AWS::ElasticLoadBalancingV2::Listener
     Properties:
       LoadBalancerArn: !Ref Alb
       Port: 80
       Protocol: HTTP
       DefaultActions:
-        - Type: forward
-          ForwardConfig:
-            TargetGroups:
-              - TargetGroupArn: !Ref AlbMainTargetGroup
-                Weight: 100
-              - TargetGroupArn: !Ref AlbBackupTargetGroup
-                Weight: 0
-  
+        - Type: redirect
+          RedirectConfig:
+            Protocol: HTTPS
+            Port: "443"
+            StatusCode: HTTP_301
+
 
   # ----------------------
   # ECS Service (Main in AZ-a)
@@ -298,6 +432,13 @@ Resources:
           Memory: "512"
           PortMappings:
             - ContainerPort: 80
+          Environment:
+            - Name: DATABASE_HOST
+              Value: !Ref AuroraWriterEndpoint
+            - Name: DATABASE_NAME
+              Value: !Ref AuroraDatabaseName
+            - Name: DATABASE_PORT
+              Value: "5432"
           Secrets:
             - Name: DATABASE_USERNAME
               ValueFrom: !Sub "${DatabaseSecretArn}:username"
@@ -309,6 +450,13 @@ Resources:
               awslogs-group: !Sub "/ecs/${ProjectName}-${Environment}"
               awslogs-region: !Ref AWS::Region
               awslogs-stream-prefix: ecs
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-ecs-task-def"
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
 
   EcsServiceMain:
     Type: AWS::ECS::Service
@@ -344,6 +492,10 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub "${ProjectName}-${Environment}-ecs-main"
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
 
   EcsServiceBackup:
     Type: AWS::ECS::Service
@@ -379,6 +531,10 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub "${ProjectName}-${Environment}-ecs-backup"
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
 
 
   # ----------------------
@@ -389,7 +545,14 @@ Resources:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: !Sub "/ecs/${ProjectName}-${Environment}"
-      RetentionInDays: 5
+      RetentionInDays: !Ref EcsLogRetention
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-log-group"
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
     DeletionPolicy: Delete
     UpdateReplacePolicy: Delete
     # Uses AWS-managed KMS key for CloudWatch Logs encryption
@@ -398,12 +561,16 @@ Resources:
 Outputs:
   AlbDnsName:
     Value: !GetAtt Alb.DNSName
-  
-  AlbArn:
-    Value: !GetAtt Alb.LoadBalancerArn
+    Description: DNS name of the Application Load Balancer
   
   AlbMainTargetGroupArn:
     Value: !GetAtt AlbMainTargetGroup.TargetGroupArn
+    Description: ARN of main ALB target group in Availability Zone A (main)
   
   AlbBackupTargetGroupArn:
     Value: !GetAtt AlbBackupTargetGroup.TargetGroupArn
+    Description: ARN of backup ALB target group in Availability Zone B (pilot light / failover)
+
+  AlbHostedZoneId:
+    Value: !GetAtt Alb.CanonicalHostedZoneID
+    Description: Canonical hosted zone ID of the ALB

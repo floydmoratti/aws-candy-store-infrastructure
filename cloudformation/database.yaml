@@ -10,6 +10,11 @@ Parameters:
     Type: String
     Description: Project name prefix for resource naming
     Default: candy-store  # Delete Default
+
+  DatabaseName:
+    Type: String
+    Description: Initial database name (lowercase, letters/numbers/underscores only)
+    Default: candy_store  # Delete Default
   
   Environment:
     Type: String
@@ -28,6 +33,11 @@ Parameters:
     Type: AWS::EC2::Subnet::Id
     Description: Private subnet for Aurora in AvailabilityZone-B (backup)
 
+  AuroraEngineVersion:
+    Type: String
+    Description: Aurora PostgreSQL major version
+    Default: "15.4"  # Delete Default
+
 
 Resources:
 
@@ -43,6 +53,10 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub "${ProjectName}-${Environment}-aurora-sg"
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
       # Ingress rule added in ComputeStack to allow ECS access
 
 
@@ -61,6 +75,13 @@ Resources:
         GenerateStringKey: "password"
         ExcludeCharacters: '"@/\'
         PasswordLength: 16
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-db-credentials"
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
     DeletionPolicy: Delete
     UpdateReplacePolicy: Delete
 
@@ -79,55 +100,94 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub "${ProjectName}-${Environment}-aurora-subnet-group"
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
   
   AuroraCluster:
     Type: AWS::RDS::DBCluster
     Properties:
       Engine: aurora-postgresql
-      # EngineVersion: 17.7
-      DatabaseName: !Sub "${ProjectName}-${Environment}-db"
+      EngineVersion: !Ref AuroraEngineVersion
+      DatabaseName: !Sub "${DatabaseName}_${Environment}_db"
       MasterUsername: !Sub "{{resolve:secretsmanager:${DatabaseSecret}:SecretString:username}}"
       MasterUserPassword: !Sub "{{resolve:secretsmanager:${DatabaseSecret}:SecretString:password}}"
       DBSubnetGroupName: !Ref AuroraSubnetGroup
       VpcSecurityGroupIds:
         - !Ref DbSecurityGroup
+      AvailabilityZones:
+        - !Select [0, !GetAZs ""]
+        - !Select [1, !GetAZs ""]
       BackupRetentionPeriod: 7
+      PreferredBackupWindow: "07:00-07:30"
+      PreferredMaintenanceWindow: "Sun:05:00-Sun:05:30"
       ServerlessV2ScalingConfiguration:
         MinCapacity: 0.5
-        MaxCapacity: 0.5
+        MaxCapacity: 1
       # DeletionProtection: true
       Tags:
         - Key: Name
           Value: !Sub "${ProjectName}-${Environment}-aurora-cluster"
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
     DeletionPolicy: Delete
     UpdateReplacePolicy: Delete
   
   AuroraWriterInstance:
     Type: AWS::RDS::DBInstance
     Properties:
+      DBInstanceIdentifier: !Sub "${ProjectName}-${Environment}-aurora-writer"
       DBClusterIdentifier: !Ref AuroraCluster
       DBInstanceClass: db.serverless
       Engine: aurora-postgresql
       AvailabilityZone: !Select [0, !GetAZs ""]
       PubliclyAccessible: false
       AutoMinorVersionUpgrade: true
+      PromotionTier: 0
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-aurora-writer"
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
     DeletionPolicy: Delete
     UpdateReplacePolicy: Delete
   
   AuroraReaderInstance:
     Type: AWS::RDS::DBInstance
     Properties:
+      DBInstanceIdentifier: !Sub "${ProjectName}-${Environment}-aurora-reader"
       DBClusterIdentifier: !Ref AuroraCluster
       DBInstanceClass: db.serverless
       Engine: aurora-postgresql
       AvailabilityZone: !Select [1, !GetAZs ""]
       PubliclyAccessible: false
       AutoMinorVersionUpgrade: true
+      PromotionTier: 1
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-aurora-reader"
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
     DeletionPolicy: Delete
     UpdateReplacePolicy: Delete
 
 
 Outputs:
+
+  AuroraDatabaseName:
+    Description: Aurora database name
+    Value: !Sub "${DatabaseName}_${Environment}_db"
+
+  AuroraClusterId:
+    Description: Aurora cluster Id
+    Value: !Ref AuroraCluster
 
   AuroraWriterEndpoint:
     Description: Aurora cluster writer endpoint

@@ -37,6 +37,10 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub "${ProjectName}-${Environment}-vpc"
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
   
   InternetGateway:
     Type: AWS::EC2::InternetGateway
@@ -44,6 +48,10 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub "${ProjectName}-${Environment}-igw"
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
   
   AttachGateway:
     Type: AWS::EC2::VPCGatewayAttachment
@@ -55,6 +63,12 @@ Resources:
   # ----------------------
   # Subnets
   # ----------------------
+
+  # 1 = ALB (& NAT)
+  # 2 = ECS
+  # 3 = DB
+  # a = AZ1 (primary)
+  # b = AZ2 (failover)
 
   PublicAlbSubnet1a:  
     Type: AWS::EC2::Subnet
@@ -68,6 +82,10 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub "${ProjectName}-${Environment}-alb-public-subnet-1a"
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
     # Public Subnet for ALB and NAT Gateway (main)
   
   PrivateEcsSubnet2a:
@@ -82,6 +100,10 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub "${ProjectName}-${Environment}-ecs-private-subnet-2a"
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
     # Private Subnet for ECS (main)
 
   PrivateDbSubnet3a:
@@ -96,6 +118,10 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub "${ProjectName}-${Environment}-aurora-private-subnet-3a"
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
     # Private Subnet for Aurora (main)
 
   PublicAlbSubnet1b:  
@@ -110,6 +136,10 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub "${ProjectName}-${Environment}-alb-public-subnet-1b"
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
     # Public Subnet for ALB (backup)
 
   PublicEcsSubnet2b:
@@ -124,6 +154,10 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub "${ProjectName}-${Environment}-ecs-public-subnet-2b"
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
     # Public Subnet for ECS (backup)
 
   PrivateDbSubnet3b:
@@ -138,44 +172,70 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub "${ProjectName}-${Environment}-aurora-private-subnet-3b"
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
     # Private Subnet for Aurora (backup)
+
+    # Private route tables created in endpoints.yaml
 
 
   # ----------------------
   # Route Tables
   # ----------------------
 
-  PublicRouteTable:
+  PublicAlbSubnet1aRouteTable:
     Type: AWS::EC2::RouteTable
     Properties:
       VpcId: !Ref VPC
       Tags:
         - Key: Name
-          Value: !Sub "${ProjectName}-${Environment}-public-rt"
-    # Route Table for all public subnets
+          Value: !Sub "${ProjectName}-${Environment}-alb-public1a-rt"
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
   
-  InternetRoute:
+  PublicAlbSubnet1aInternetRoute:
     Type: AWS::EC2::Route
     DependsOn: AttachGateway
     Properties:
-      RouteTableId: !Ref PublicRouteTable
+      RouteTableId: !Ref PublicAlbSubnet1aRouteTable
       DestinationCidrBlock: 0.0.0.0/0
       GatewayId: !Ref InternetGateway
-    # Internet Route for Public Route Table
   
-  PublicSubnet1aAssociation:
+  PublicAlbSubnet1aAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
       SubnetId: !Ref PublicAlbSubnet1a
-      RouteTableId: !Ref PublicRouteTable
-    # Associates Public Subnet 1a (ALB and NAT Gateway)
+      RouteTableId: !Ref PublicAlbSubnet1aRouteTable
+
+  PublicAlbSubnet1bRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-alb-public1b-rt"
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+
+  PublicAlbSubnet1bInternetRoute:
+    Type: AWS::EC2::Route
+    DependsOn: AttachGateway
+    Properties:
+      RouteTableId: !Ref PublicAlbSubnet1bRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
 
   PublicSubnet1bAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
       SubnetId: !Ref PublicAlbSubnet1b
-      RouteTableId: !Ref PublicRouteTable
-    # Associates Public Subnet 1b (ALB backup)
+      RouteTableId: !Ref PublicAlbSubnet1bRouteTable
 
 
 Outputs:
@@ -183,6 +243,14 @@ Outputs:
   VpcId:
     Description: VPC ID
     Value: !Ref VPC
+  
+  AzA:
+    Description: Primary Availability Zone of main resources
+    Value: !Select [0, !GetAZs ""]
+
+  AzB:
+    Description: Backup Availability Zone of failover resources
+    Value: !Select [1, !GetAZs ""]
   
   PublicAlbSubnet1a:
     Description: Public subnet for ALB and NAT Gateway in AvailabilityZone-A (main)
