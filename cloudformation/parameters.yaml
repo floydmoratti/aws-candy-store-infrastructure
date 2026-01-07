@@ -1,0 +1,33 @@
+Parameters:
+
+  ProjectName:
+    Type: String
+    Description: Project name prefix (e.g. candy-store)
+
+  Environment:
+    Type: String
+    Description: Deployment environment (dev, prod)
+
+  WebsiteBucketName:
+    Type: String
+    Description: Name of S3 bucket hosting static website
+
+  HostedZoneId:
+    Type: String
+    Description: Route 53 Hosted Zone ID for the domain
+
+  DomainName:
+    Type: String
+    Description: Root domain name (e.g. candyheaven.com)
+
+  CloudFrontAcmCertificateArn:
+    Type: String
+    Description: ACM certificate ARN in us-east-1 for CloudFront
+  
+  EnableWaf:
+    Type: String
+    AllowedValues:
+      - true
+      - false
+    Description: Whether to enable AWS WAF for CloudFront
+    Default: false  # Delete Default
