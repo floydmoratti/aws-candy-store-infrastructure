@@ -42,7 +42,7 @@ Conditions:
 Resources:
 
   # ----------------------
-  # S3 Bucket Policy
+  # S3 Bucket & Policy
   # ----------------------
 
   WebsiteBucketPolicy:
@@ -52,15 +52,6 @@ Resources:
       PolicyDocument:
         Version: "2012-10-17"
         Statement:
-          - Sid: AllowCloudFrontReadOnly
-            Effect: Allow
-            Principal:
-              Service: cloudfront.amazonaws.com
-            Action: s3:GetObject
-            Resource: !Sub "arn:${AWS::Partition}:s3:::${WebsiteBucketName}/*"
-            Condition:
-              StringEquals:
-                AWS:SourceArn: !Sub "arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${CloudFrontDistribution}"
           - Sid: DenyInsecureTransport
             Effect: Deny
             Principal: "*"
@@ -71,6 +62,34 @@ Resources:
             Condition:
               Bool:
                 aws:SecureTransport: false
+  
+  LogBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${ProjectName}-${Environment}-cloudfront-logs"
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Status: Enabled
+            ExpirationInDays: 30
+            Prefix: ""
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      VersioningConfiguration:
+        Status: Disabled
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-cloudfront-logs"
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
 
 
   # ----------------------
@@ -78,6 +97,7 @@ Resources:
   # ----------------------
 
   CloudFrontWebAcl:
+    Condition: EnableWafCondition
     Type: AWS::WAFv2::WebACL
     Properties:
       Name: !Sub "${ProjectName}-${Environment}-cloudfront-waf"
@@ -171,6 +191,12 @@ Resources:
           ReferrerPolicy:
             ReferrerPolicy: strict-origin-when-cross-origin
             Override: true
+          XSSProtection:
+            Override: true
+            Protection: true
+            ModeBlock: true
+          ContentSecurityPolicy:
+            Override: false
 
   CloudFrontDistribution:
     Type: AWS::CloudFront::Distribution
@@ -193,6 +219,30 @@ Resources:
             DomainName: !Sub "${WebsiteBucketName}.s3.amazonaws.com"
             OriginAccessControlId: !Ref CloudFrontOAC
             S3OriginConfig: {}
+          - Id: ApiGatewayOrigin
+            DomainName: !ImportValue "${ProjectName}-${Environment}-ApiGatewayDomainName"
+            CustomOriginConfig:
+              OriginProtocolPolicy: https-only
+              HTTPSPort: 443
+              OriginSslProtocols:
+                - TLSv1.2
+        CacheBehaviors:
+          - PathPattern: /api/*
+            TargetOriginId: ApiGatewayOrigin
+            ViewerProtocolPolicy: redirect-to-https
+            AllowedMethods:
+              - GET
+              - POST
+              - PUT
+              - PATCH
+              - DELETE
+              - OPTIONS
+            CachedMethods:
+              - GET
+              - HEAD
+            Compress: true
+            CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad  # CachingDisabled
+            ResponseHeadersPolicyId: !Ref CloudFrontResponseHeadersPolicy
         DefaultCacheBehavior:
           TargetOriginId: StaticSiteOrigin
           ViewerProtocolPolicy: redirect-to-https
@@ -219,6 +269,10 @@ Resources:
           MinimumProtocolVersion: TLSv1.2_2021
         PriceClass: PriceClass_100
         Comment: !Sub "CloudFront for ${ProjectName}-${Environment} static site"
+        Logging:
+          Bucket: !Ref LogBucket
+          IncludeCookies: false
+          Prefix: !Sub "${ProjectName}/${Environment}/"
       Tags:
         - Key: Name
           Value: !Sub "${ProjectName}-${Environment}-cloudfront"
