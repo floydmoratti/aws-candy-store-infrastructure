@@ -29,15 +29,11 @@ Parameters:
   KeyOrdersLambda:
     Type: String
 
-  JwtSecretArn:
-    Type: String
-
 
 
 Conditions:
 
   IsProd: !Equals [!Ref Environment, prod]
-  HasJwtSecret: !Not [!Equals [!Ref JwtSecretArn, ""]]
 
 
 
@@ -226,7 +222,7 @@ Resources:
       Role: !GetAtt ProductsLambdaRole.Arn
       Code:
         S3Bucket: !Ref LambdaCodeBucket
-        S3Key: !Ref KeyProductsLambda
+        S3Key: !Ref KeyCartLambda
       Environment:
         Variables:
           PRODUCTS_TABLE: !ImportValue
@@ -247,4 +243,194 @@ Resources:
           Value: !Ref ProjectName
         - Key: Environment
           Value: !Ref Environment
-      
+
+  CartFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "${ProjectName}-${Environment}-cart-function"
+      Runtime: python3.11
+      Handler: index.handler
+      Role: !GetAtt CartLambdaRole.Arn
+      Code:
+        S3Bucket: !Ref LambdaCodeBucket
+        S3Key: !Ref KeyProductsLambda
+      Environment:
+        Variables:
+          CARTS_TABLE: !ImportValue
+            Fn::Sub: "${ProjectName}-${Environment}-CartsTableName"
+          PRODUCTS_TABLE: !ImportValue
+            Fn::Sub: "${ProjectName}-${Environment}-ProductsTableName"
+          ENVIRONMENT: !Ref Environment
+          LOG_LEVEL: !If [IsProd, INFO, DEBUG]
+          CART_TTL_DAYS: "30"
+      Timeout: 30
+      MemorySize: 256
+      ReservedConcurrentExecutions: !If [IsProd, 100, 10]
+      Architectures:
+        - arm64  # Graviton2
+      TracingConfig:
+        Mode: Active
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-cart-function"
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+
+  CheckoutFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "${ProjectName}-${Environment}-checkout-function"
+      Runtime: python3.11
+      Handler: index.handler
+      Role: !GetAtt CheckoutLambdaRole.Arn
+      Code:
+        S3Bucket: !Ref LambdaCodeBucket
+        S3Key: !Ref KeyCheckoutLambda
+      Environment:
+        Variables:
+          CARTS_TABLE: !ImportValue
+            Fn::Sub: "${ProjectName}-${Environment}-CartsTableName"
+          ORDERS_TABLE: !ImportValue 
+            Fn::Sub: "${ProjectName}-${Environment}-OrdersTableName"
+          PRODUCTS_TABLE: !ImportValue
+            Fn::Sub: "${ProjectName}-${Environment}-ProductsTableName"
+          ENVIRONMENT: !Ref Environment
+          LOG_LEVEL: !If [IsProd, INFO, DEBUG]
+          PAYMENT_PROVIDER: "MOCK"
+      Timeout: 60
+      MemorySize: 512
+      ReservedConcurrentExecutions: !If [IsProd, 50, 5]
+      Architectures:
+        - arm64  # Graviton2
+      TracingConfig:
+        Mode: Active
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-checkout-function"
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+
+  OrdersFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "${ProjectName}-${Environment}-orders-function"
+      Runtime: python3.11
+      Handler: index.handler
+      Role: !GetAtt OrdersLambdaRole.Arn
+      Code:
+        S3Bucket: !Ref LambdaCodeBucket
+        S3Key: !Ref KeyOrdersLambda
+      Environment:
+        Variables:
+          ORDERS_TABLE: !ImportValue 
+            Fn::Sub: "${ProjectName}-${Environment}-OrdersTableName"
+          ENVIRONMENT: !Ref Environment
+          LOG_LEVEL: !If [IsProd, INFO, DEBUG]
+          PAYMENT_PROVIDER: "MOCK"
+      Timeout: 30
+      MemorySize: 256
+      ReservedConcurrentExecutions: !If [IsProd, 50, 5]
+      Architectures:
+        - arm64  # Graviton2
+      TracingConfig:
+        Mode: Active
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-orders-function"
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+
+
+  # ----------------------
+  # Log Groups
+  # ----------------------
+
+  ProductsFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${ProductsFunction}"
+      RetentionInDays: !If [IsProd, 30, 7]
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+
+  CartFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${CartFunction}"
+      RetentionInDays: !If [IsProd, 30, 7]
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+
+  CheckoutFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${CheckoutFunction}"
+      RetentionInDays: !If [IsProd, 30, 7]
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+
+  OrdersFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${OrdersFunction}"
+      RetentionInDays: !If [IsProd, 30, 7]
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+  
+
+
+Outputs:
+
+  ProductsFunctionArn:
+    Description: Products Lambda function ARN
+    Value: !GetAtt ProductsFunction.Arn
+    Export:
+      Name: !Sub "${ProjectName}-${Environment}-ProductsFunctionArn"
+
+  ProductsFunctionName:
+    Description: Products Lambda function name
+    Value: !Ref ProductsFunction
+    Export:
+      Name: !Sub "${ProjectName}-${Environment}-ProductsFunctionName"
+
+  CartFunctionArn:
+    Description: Cart Lambda function ARN
+    Value: !GetAtt CartFunction.Arn
+    Export:
+      Name: !Sub "${ProjectName}-${Environment}-CartFunctionArn"
+
+  CartFunctionName:
+    Description: Cart Lambda function name
+    Value: !Ref CartFunction
+    Export:
+      Name: !Sub "${ProjectName}-${Environment}-CartFunctionName"
+
+  CheckoutFunctionArn:
+    Description: Checkout Lambda function ARN
+    Value: !GetAtt CheckoutFunction.Arn
+    Export:
+      Name: !Sub "${ProjectName}-${Environment}-CheckoutFunctionArn"
+
+  CheckoutFunctionName:
+    Description: Checkout Lambda function name
+    Value: !Ref CheckoutFunction
+    Export:
+      Name: !Sub "${ProjectName}-${Environment}-CheckoutFunctionName"
+
+  OrdersFunctionArn:
+    Description: Orders Lambda function ARN
+    Value: !GetAtt OrdersFunction.Arn
+    Export:
+      Name: !Sub "${ProjectName}-${Environment}-OrdersFunctionArn"
+
+  OrdersFunctionName:
+    Description: Orders Lambda function name
+    Value: !Ref OrdersFunction
+    Export:
+      Name: !Sub "${ProjectName}-${Environment}-OrdersFunctionName"
