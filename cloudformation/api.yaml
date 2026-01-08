@@ -1,0 +1,392 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  API stack for aws-ecommerce-infrastructure.
+  Creates HTTP API Gateway with routes, authorizers, and Lambda integrations.
+
+
+
+Parameters:
+
+  ProjectName:
+    Type: String
+
+  Environment:
+    Type: String
+
+  JwtIssuer:
+    Type: String
+
+  JwtAudience:
+    Type: String
+
+  ThrottleBurstLimit:
+    Type: Number
+
+  ThrottleRateLimit:
+    Type: Number
+
+
+
+Conditions:
+
+  IsProd: !Equals [!Ref Environment, prod]
+  HasJwtConfig: !And
+    - !Not [!Equals [!Ref JwtIssuer, ""]]
+    - !Not [!Equals [!Ref JwtAudience, ""]]
+
+
+
+Resources:
+
+  # ----------------------
+  # HTTP API
+  # ----------------------
+
+  HttpApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: !Sub "${ProjectName}-${Environment}-api"
+      Description: !Sub "Ecommerce API for ${ProjectName}-${Environment}"
+      ProtocolType: HTTP
+      CorsConfiguration:
+        AllowOrigins:
+          - !If
+            - IsProd
+            - !Sub "https://${ProjectName}.com"
+            - "*"
+        AllowMethods:
+          - GET
+          - POST
+          - PUT
+          - PATCH
+          - DELETE
+          - OPTIONS
+        AllowHeaders:
+          - Content-Type
+          - Authorization
+          - X-Amz-Date
+          - X-Api-Key
+          - X-Amz-Security-Token
+        MaxAge: 3600
+        AllowCredentials: false
+      Tags:
+        Project: !Ref ProjectName
+        Environment: !Ref Environment
+
+
+  # ----------------------
+  # JWT Authorizer
+  # ----------------------
+
+  JwtAuthorizer:
+    Type: AWS::ApiGatewayV2::Authorizer
+    Condition: HasJwtConfig
+    Properties:
+      Name: !Sub "${ProjectName}-${Environment}-jwt-authorizer"
+      ApiId: !Ref HttpApi
+      AuthorizerType: JWT
+      IdentitySource:
+        - $request.header.Authorization
+      JwtConfiguration:
+        Audience:
+          - !Ref JwtAudience
+        Issuer: !Ref JwtIssuer
+
+
+  # ----------------------
+  # Api Integrations
+  # ----------------------
+
+  ProductsIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref HttpApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub
+        - "arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${FunctionArn}/invocations"
+        - FunctionArn:
+            Fn::ImportValue: !Sub "${ProjectName}-${Environment}-ProductsFunctionArn"
+      IntegrationMethod: POST
+      PayloadFormatVersion: "2.0"
+      TimeoutInMillis: 30000
+  
+  CartIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref HttpApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub
+        - "arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${FunctionArn}/invocations"
+        - FunctionArn:
+            Fn::ImportValue: !Sub "${ProjectName}-${Environment}-CartFunctionArn"
+      IntegrationMethod: POST
+      PayloadFormatVersion: "2.0"
+      TimeoutInMillis: 30000
+
+  CheckoutIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref HttpApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub
+        - "arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${FunctionArn}/invocations"
+        - FunctionArn:
+            Fn::ImportValue: !Sub "${ProjectName}-${Environment}-CheckoutFunctionArn"
+      IntegrationMethod: POST
+      PayloadFormatVersion: "2.0"
+      TimeoutInMillis: 60000
+
+  OrdersIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref HttpApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub
+        - "arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${FunctionArn}/invocations"
+        - FunctionArn:
+            Fn::ImportValue: !Sub "${ProjectName}-${Environment}-OrdersFunctionArn"
+      IntegrationMethod: POST
+      PayloadFormatVersion: "2.0"
+      TimeoutInMillis: 30000
+
+
+  # ----------------------
+  # Routes - Products
+  # ----------------------
+
+  GetProductsRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: GET api/products
+      Target: !Sub "integrations/${ProductsIntegration}"
+  
+  GetProductRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: GET api/products/{productId}
+      Target: !Sub "integrations/${ProductsIntegration}"
+
+  CreateProductRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: POST api/products
+      Target: !Sub "integrations/${ProductsIntegration}"
+      AuthorizationType: !If [HasJwtConfig, JWT, NONE]
+      AuthorizerId: !If [HasJwtConfig, !Ref JwtAuthorizer, !Ref AWS::NoValue]
+  
+  UpdateProductRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: PUT api/products/{productId}
+      Target: !Sub "integrations/${ProductsIntegration}"
+      AuthorizationType: !If [HasJwtConfig, JWT, NONE]
+      AuthorizerId: !If [HasJwtConfig, !Ref JwtAuthorizer, !Ref AWS::NoValue]
+
+  DeleteProductRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: DELETE api/products/{productId}
+      Target: !Sub "integrations/${ProductsIntegration}"
+      AuthorizationType: !If [HasJwtConfig, JWT, NONE]
+      AuthorizerId: !If [HasJwtConfig, !Ref JwtAuthorizer, !Ref AWS::NoValue]
+
+
+  # ----------------------
+  # Routes - Cart
+  # ----------------------
+
+  GetCartRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: GET api/cart
+      Target: !Sub "integrations/${CartIntegration}"
+      AuthorizationType: !If [HasJwtConfig, JWT, NONE]
+      AuthorizerId: !If [HasJwtConfig, !Ref JwtAuthorizer, !Ref AWS::NoValue]
+
+  AddToCartRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: POST api/cart
+      Target: !Sub "integrations/${CartIntegration}"
+      AuthorizationType: !If [HasJwtConfig, JWT, NONE]
+      AuthorizerId: !If [HasJwtConfig, !Ref JwtAuthorizer, !Ref AWS::NoValue]
+
+  UpdateCartRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: PUT api/cart/{itemId}
+      Target: !Sub "integrations/${CartIntegration}"
+      AuthorizationType: !If [HasJwtConfig, JWT, NONE]
+      AuthorizerId: !If [HasJwtConfig, !Ref JwtAuthorizer, !Ref AWS::NoValue]
+
+  RemoveFromCartRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: DELETE api/cart/{itemId}
+      Target: !Sub "integrations/${CartIntegration}"
+      AuthorizationType: !If [HasJwtConfig, JWT, NONE]
+      AuthorizerId: !If [HasJwtConfig, !Ref JwtAuthorizer, !Ref AWS::NoValue]
+
+  ClearCartRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: DELETE api/cart
+      Target: !Sub "integrations/${CartIntegration}"
+      AuthorizationType: !If [HasJwtConfig, JWT, NONE]
+      AuthorizerId: !If [HasJwtConfig, !Ref JwtAuthorizer, !Ref AWS::NoValue]
+
+
+  # ----------------------
+  # Routes - Checkout
+  # ----------------------
+
+  CheckoutRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: POST api/checkout
+      Target: !Sub "integrations/${CheckoutIntegration}"
+      AuthorizationType: !If [HasJwtConfig, JWT, NONE]
+      AuthorizerId: !If [HasJwtConfig, !Ref JwtAuthorizer, !Ref AWS::NoValue]
+
+
+  # ----------------------
+  # Routes - Orders
+  # ----------------------
+
+  GetOrdersRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: GET api/orders
+      Target: !Sub "integrations/${OrdersIntegration}"
+      AuthorizationType: !If [HasJwtConfig, JWT, NONE]
+      AuthorizerId: !If [HasJwtConfig, !Ref JwtAuthorizer, !Ref AWS::NoValue]
+
+  GetOrderRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: GET api/orders/{orderId}
+      Target: !Sub "integrations/${OrdersIntegration}"
+      AuthorizationType: !If [HasJwtConfig, JWT, NONE]
+      AuthorizerId: !If [HasJwtConfig, !Ref JwtAuthorizer, !Ref AWS::NoValue]
+
+
+  # ----------------------
+  # Stage & Deployment
+  # ----------------------
+
+  ApiStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      StageName: !Ref Environment
+      ApiId: !Ref HttpApi
+      AutoDeploy: true
+      Description: !Sub "${Environment} stage"
+      AccessLogSettings:
+        DestinationArn: !GetAtt ApiLogGroup.Arn
+        Format: >-
+          {"requestId":"$context.requestId",
+          "ip":"$context.identity.sourceIp",
+          "requestTime":"$context.requestTime",
+          "httpMethod":"$context.httpMethod",
+          "routeKey":"$context.routeKey",
+          "status":"$context.status",
+          "protocol":"$context.protocol",
+          "responseLength":"$context.responseLength",
+          "integrationError":"$context.integrationErrorMessage"}
+      DefaultRouteSettings:
+        ThrottlingBurstLimit: !Ref ThrottleBurstLimit
+        ThrottlingRateLimit: !Ref ThrottleRateLimit
+        DetailedMetricsEnabled: !If [IsProd, true, false]
+      Tags:
+        Project: !Ref ProjectName
+        Environment: !Ref Environment
+
+  ApiLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/apigateway/${ProjectName}-${Environment}"
+      RetentionInDays: !If [IsProd, 30, 7]
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+
+
+  # ----------------------
+  # Lambda Permissions
+  # ----------------------
+
+  ProductsFunctionPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !ImportValue
+        Fn::Sub: "${ProjectName}-${Environment}-ProductsFunctionName"
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*"
+
+  CartFunctionPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !ImportValue
+        Fn::Sub: "${ProjectName}-${Environment}-CartFunctionName"
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*"
+
+  CheckoutFunctionPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !ImportValue
+        Fn::Sub: "${ProjectName}-${Environment}-CheckoutFunctionName"
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*"
+
+  OrdersFunctionPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !ImportValue
+        Fn::Sub: "${ProjectName}-${Environment}-OrdersFunctionName"
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*"
+
+
+
+Outputs:
+
+  HttpApiId:
+    Description: HTTP API ID
+    Value: !Ref HttpApi
+    Export:
+      Name: !Sub "${ProjectName}-${Environment}-HttpApiId"
+
+  HttpApiEndpoint:
+    Description: HTTP API endpoint URL
+    Value: !GetAtt HttpApi.ApiEndpoint
+    Export:
+      Name: !Sub "${ProjectName}-${Environment}-HttpApiEndpoint"
+
+  ApiGatewayDomainName:
+    Description: API Gateway domain name (for CloudFront origin)
+    Value: !Select [2, !Split ["/", !GetAtt HttpApi.ApiEndpoint]]
+    Export:
+      Name: !Sub "${ProjectName}-${Environment}-ApiGatewayDomainName"
+
+  ApiStageUrl:
+    Description: Full API stage URL
+    Value: !Sub "${HttpApi.ApiEndpoint}/${Environment}"
+    Export:
+      Name: !Sub "${ProjectName}-${Environment}-ApiStageUrl"
