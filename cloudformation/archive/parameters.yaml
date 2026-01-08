@@ -1,0 +1,50 @@
+  ProjectName:
+    Type: String
+    Description: Project name for resource naming
+
+  Environment:
+    Type: String
+    Description: Environment name (dev, staging, prod)
+    AllowedValues:
+      - dev
+      - staging
+      - prod
+
+  EnablePointInTimeRecovery:
+    Type: String
+    Description: Enable point-in-time recovery for DynamoDB tables
+    Default: "false"
+    AllowedValues:
+      - "true"
+      - "false"
+
+
+
+  LambdaCodeBucket:
+    Type: String
+    Description: S3 bucket containing Lambda deployment packages
+
+  KeyProductsLambda:
+    Type: String
+    Description: S3 key prefix for Products Lambda deployment package
+    Default: "lambda/products.zip"
+
+  KeyCartLambda:
+    Type: String
+    Description: S3 key prefix for Cart Lambda deployment package
+    Default: "lambda/cart.zip"
+
+  KeyCheckoutLambda:
+    Type: String
+    Description: S3 key prefix for Checkout Lambda deployment package
+    Default: "lambda/checkout.zip"
+
+  KeyOrdersLambda:
+    Type: String
+    Description: S3 key prefix for Orders Lambda deployment package
+    Default: "lambda/orders.zip"
+
+  JwtSecretArn:
+    Type: String
+    Description: ARN of JWT secret in Secrets Manager
+    Default: ""

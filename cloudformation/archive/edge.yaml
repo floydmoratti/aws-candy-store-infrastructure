@@ -82,7 +82,7 @@ Resources:
           - ServerSideEncryptionByDefault:
               SSEAlgorithm: AES256
       VersioningConfiguration:
-        Status: Disabled
+        Status: Suspended
       Tags:
         - Key: Name
           Value: !Sub "${ProjectName}-${Environment}-cloudfront-logs"
@@ -196,6 +196,7 @@ Resources:
             Protection: true
             ModeBlock: true
           ContentSecurityPolicy:
+            ContentSecurityPolicy: "default-src 'self'"
             Override: false
 
   CloudFrontDistribution:
@@ -220,11 +221,13 @@ Resources:
             OriginAccessControlId: !Ref CloudFrontOAC
             S3OriginConfig: {}
           - Id: ApiGatewayOrigin
-            DomainName: !ImportValue "${ProjectName}-${Environment}-ApiGatewayDomainName"
+            DomainName:
+              Fn::ImportValue:
+                Fn::Sub: "${ProjectName}-${Environment}-ApiGatewayDomainName"
             CustomOriginConfig:
               OriginProtocolPolicy: https-only
               HTTPSPort: 443
-              OriginSslProtocols:
+              OriginSSLProtocols:
                 - TLSv1.2
         CacheBehaviors:
           - PathPattern: /api/*

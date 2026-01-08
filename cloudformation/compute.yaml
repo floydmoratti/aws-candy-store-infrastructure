@@ -1,0 +1,250 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Compute stack for aws-ecommerce-infrastructure.
+  Creates Lambda functions for Products, Cart, Checkout, and Orders APIs
+  with IAM roles, logging, and environment configuration.
+
+
+
+Parameters:
+
+  ProjectName:
+    Type: String
+
+  Environment:
+    Type: String
+
+  LambdaCodeBucket:
+    Type: String
+
+  KeyProductsLambda:
+    Type: String
+
+  KeyCartLambda:
+    Type: String
+
+  KeyCheckoutLambda:
+    Type: String
+
+  KeyOrdersLambda:
+    Type: String
+
+  JwtSecretArn:
+    Type: String
+
+
+
+Conditions:
+
+  IsProd: !Equals [!Ref Environment, prod]
+  HasJwtSecret: !Not [!Equals [!Ref JwtSecretArn, ""]]
+
+
+
+Resources:
+
+  # ----------------------
+  # IAM Roles
+  # ----------------------
+
+  ProductsLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ProjectName}-${Environment}-products-lambda-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: !Sub "${ProjectName}-${Environment}-products-lambda-policy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: DynamoDbProductsTableAccess
+                Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:DeleteItem
+                  - dynamodb:Query
+                  - dynamodb:Scan
+                Resource:
+                  - Fn::ImportValue: !Sub "${ProjectName}-${Environment}-ProductsTableArn"
+                  - !Sub  # Include Indexes
+                    - "${TableArn}/index/*"
+                    - TableArn:
+                        Fn::ImportValue: !Sub "${ProjectName}-${Environment}-ProductsTableArn"
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+
+  CartLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ProjectName}-${Environment}-cart-lambda-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: !Sub "${ProjectName}-${Environment}-cart-lambda-policy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: DynamoDbCartsTableAccess
+                Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:DeleteItem
+                  - dynamodb:Query
+                Resource:
+                  - Fn::ImportValue: !Sub "${ProjectName}-${Environment}-CartsTableArn"
+                  - !Sub  # Include Indexes
+                    - "${TableArn}/index/*"
+                    - TableArn:
+                        Fn::ImportValue: !Sub "${ProjectName}-${Environment}-CartsTableArn"
+              - Sid: DynamoDbProductsTableAccess
+                Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:Query
+                Resource:
+                  - Fn::ImportValue: !Sub "${ProjectName}-${Environment}-ProductsTableArn"
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+
+  CheckoutLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ProjectName}-${Environment}-checkout-lambda-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: !Sub "${ProjectName}-${Environment}-checkout-lambda-policy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: DynamoDbCartsTableAccess
+                Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:Query
+                  - dynamodb:DeleteItem
+                Resource:
+                  - Fn::ImportValue: !Sub "${ProjectName}-${Environment}-CartsTableArn"
+              - Sid: DynamoDbOrdersTableAccess
+                Effect: Allow
+                Action:
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                Resource:
+                  - Fn::ImportValue: !Sub "${ProjectName}-${Environment}-OrdersTableArn"
+              - Sid: DynamoDbProductsTableAccess
+                Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:Query
+                Resource:
+                  - Fn::ImportValue: !Sub "${ProjectName}-${Environment}-ProductsTableArn"
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+
+  OrdersLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ProjectName}-${Environment}-orders-lambda-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: !Sub "${ProjectName}-${Environment}-orders-lambda-policy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: DynamoDbOrdersTableAccess
+                Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:Query
+                Resource:
+                  - Fn::ImportValue: !Sub "${ProjectName}-${Environment}-OrdersTableArn"
+                  - !Sub  # Include Indexes
+                    - "${TableArn}/index/*"
+                    - TableArn:
+                        Fn::ImportValue: !Sub "${ProjectName}-${Environment}-OrdersTableArn"
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+
+
+  # ----------------------
+  # Lambda Functions
+  # ----------------------
+
+  ProductsFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "${ProjectName}-${Environment}-products-function"
+      Runtime: python3.11
+      Handler: index.handler
+      Role: !GetAtt ProductsLambdaRole.Arn
+      Code:
+        S3Bucket: !Ref LambdaCodeBucket
+        S3Key: !Ref KeyProductsLambda
+      Environment:
+        Variables:
+          PRODUCTS_TABLE: !ImportValue
+            Fn::Sub: "${ProjectName}-${Environment}-ProductsTableName"
+          ENVIRONMENT: !Ref Environment
+          LOG_LEVEL: !If [IsProd, INFO, DEBUG]
+      Timeout: 30
+      MemorySize: 256
+      ReservedConcurrentExecutions: !If [IsProd, 100, 10]
+      Architectures:
+        - arm64  # Graviton2
+      TracingConfig:
+        Mode: Active
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-products-function"
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+      

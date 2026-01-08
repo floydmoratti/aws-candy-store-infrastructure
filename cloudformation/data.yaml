@@ -1,0 +1,217 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Data stack for aws-ecommerce-infrastructure.
+  Creates DynamoDB tables for Products, Carts, and Orders with
+  GSIs, encryption, backups, and TTL configuration.
+
+
+
+Parameters:
+
+  ProjectName:
+    Type: String
+
+  Environment:
+    Type: String
+
+  EnablePointInTimeRecovery:
+    Type: String
+
+
+
+Conditions:
+
+  IsProd: !Equals [!Ref Environment, prod]
+  EnablePITR: !Or
+    - !Equals [!Ref EnablePointInTimeRecovery, "true"]
+    - !Condition IsProd
+
+
+
+Resources:
+
+  # ----------------------
+  # DynamoDB Tables
+  # ----------------------
+  
+  ProductsTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: !Sub "${ProjectName}-${Environment}-products"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: productId
+          AttributeType: S
+        - AttributeName: category
+          AttributeType: S
+        - AttributeName: createdAt
+          AttributeType: N
+      KeySchema:
+        - AttributeName: productId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: CategoryIndex
+          KeySchema:
+            - AttributeName: category
+              KeyType: HASH
+            - AttributeName: createdAt
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES  # Output before and after state of changes
+      SSESpecification:
+        SSEEnabled: true
+        SSEType: KMS
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: !If [EnablePITR, true, false]
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-products"
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+
+  CartsTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      TableName: !Sub "${ProjectName}-${Environment}-carts"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: cartId
+          AttributeType: S
+        - AttributeName: userId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: cartId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: UserIndex
+          KeySchema:
+            - AttributeName: userId
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+      SSESpecification:
+        SSEEnabled: true
+        SSEType: KMS
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: !If [EnablePITR, true, false]
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-carts"
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+
+  OrdersTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: !Sub "${ProjectName}-${Environment}-orders"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: orderId
+          AttributeType: S
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: createdAt
+          AttributeType: N
+        - AttributeName: status
+          AttributeType: S
+      KeySchema:
+        - AttributeName: orderId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: UserOrdersIndex
+          KeySchema:
+            - AttributeName: userId
+              KeyType: HASH
+            - AttributeName: createdAt
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        - IndexName: StatusIndex
+          KeySchema:
+            - AttributeName: status
+              KeyType: HASH
+            - AttributeName: createdAt
+              KeyType: RANGE
+          Projection:
+            ProjectionType: KEYS_ONLY
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES  # Output before and after state of changes
+      SSESpecification:
+        SSEEnabled: true
+        SSEType: KMS
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: !If [EnablePITR, true, false]
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-orders"
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+
+
+
+Outputs:
+
+  ProductsTableName:
+    Description: Products DynamoDB table name
+    Value: !Ref ProductsTable
+    Export:
+      Name: !Sub "${ProjectName}-${Environment}-ProductsTableName"
+
+  ProductsTableArn:
+    Description: Products DynamoDB table ARN
+    Value: !GetAtt ProductsTable.Arn
+    Export:
+      Name: !Sub "${ProjectName}-${Environment}-ProductsTableArn"
+
+  ProductsTableStreamArn:
+    Description: Products DynamoDB table stream ARN
+    Value: !GetAtt ProductsTable.StreamArn
+    Export:
+      Name: !Sub "${ProjectName}-${Environment}-ProductsTableStreamArn"
+
+  CartsTableName:
+    Description: Carts DynamoDB table name
+    Value: !Ref CartsTable
+    Export:
+      Name: !Sub "${ProjectName}-${Environment}-CartsTableName"
+
+  CartsTableArn:
+    Description: Carts DynamoDB table ARN
+    Value: !GetAtt CartsTable.Arn
+    Export:
+      Name: !Sub "${ProjectName}-${Environment}-CartsTableArn"
+
+  OrdersTableName:
+    Description: Orders DynamoDB table name
+    Value: !Ref OrdersTable
+    Export:
+      Name: !Sub "${ProjectName}-${Environment}-OrdersTableName"
+
+  OrdersTableArn:
+    Description: Orders DynamoDB table ARN
+    Value: !GetAtt OrdersTable.Arn
+    Export:
+      Name: !Sub "${ProjectName}-${Environment}-OrdersTableArn"
+
+  OrdersTableStreamArn:
+    Description: Orders DynamoDB table stream ARN
+    Value: !GetAtt OrdersTable.StreamArn
+    Export:
+      Name: !Sub "${ProjectName}-${Environment}-OrdersTableStreamArn"
