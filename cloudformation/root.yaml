@@ -1,0 +1,416 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Root stack for aws-ecommerce-infrastructure.
+  Orchestrates all nested stacks: data, compute, api, edge, and observability.
+
+
+
+Metadata:
+
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Project
+        Parameters:
+          - ProjectName
+          - Environment
+      
+      - Label:
+          default: Database
+        Parameters:
+          - EnablePointInTimeRecovery
+
+      - Label:
+          default: Lambda
+        Parameters:
+          - LambdaCodeBucket
+          - KeyProductsLambda
+          - KeyCartLambda
+          - KeyCheckoutLambda
+          - KeyOrdersLambda
+      
+      - Label:
+          default: Domain & DNS
+        Parameters:
+          - WebsiteBucketName
+          - DomainName
+          - HostedZoneId
+          - CloudFrontAcmCertificateArn
+          - CloudFrontPriceClass
+      
+      - Label:
+          default: Api & Security
+        Parameters:
+          - EnableWaf
+          - JwtIssuer
+          - JwtAudience
+          - ThrottleBurstLimit
+          - ThrottleRateLimit
+      
+      - Label:
+          default: Observability
+        Parameters:
+          - AlarmEmail
+          - EnableAlarms
+          - EnableDashboards
+      
+      - Label:
+          default: Template Locations
+        Parameters:
+          - TemplatesBucket
+          - TemplatesPrefix
+
+
+
+Parameters:
+
+  # ----------------------
+  # Project Configuration
+  # ----------------------
+
+  ProjectName:
+    Type: String
+    Description: Project name for resource naming
+    Default: ecommerce
+    AllowedPattern: ^[a-z][a-z0-9-]*$
+    ConstraintDescription: Must start with a letter and contain only lowercase letters, numbers, and hyphens
+
+  Environment:
+    Type: String
+    Description: Environment name (dev|staging|prod)
+    Default: dev
+    AllowedValues:
+      - dev
+      - staging
+      - prod
+
+  # ----------------------
+  # Database
+  # ----------------------
+
+  EnablePointInTimeRecovery:
+    Type: String
+    Description: Enable point-in-time recovery for DynamoDB tables (true|false)
+    Default: "false"
+    AllowedValues:
+      - "true"
+      - "false"
+
+  # ----------------------
+  # Lambda Configuration
+  # ----------------------
+
+  LambdaBucketName:
+    Type: String
+    Description: The name of the S3 bucket containing Lambda deployment packages
+    AllowedPattern: '^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$'
+    ConstraintDescription: >
+      Must be a valid S3 bucket name (3-63 characters, lowercase letters,
+      numbers, dots, and hyphens only).
+
+  LambdaCodeKey:
+    Type: String
+    Description: S3 key prefix for Lambda deployment packages with no trailing slash (e.g. lambda)
+    Default: lambda
+
+  # ----------------------
+  # Domain & DNS
+  # ----------------------
+
+  WebsiteBucketName:
+    Type: String
+    Description: The name of the S3 bucket containing the static website files
+    AllowedPattern: '^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$'
+    ConstraintDescription: >
+      Must be a valid S3 bucket name (3-63 characters, lowercase letters,
+      numbers, dots, and hyphens only).
+
+  DomainName:
+    Type: String
+    Description: Domain name for the website (e.g., example.com)
+    Default: ""
+
+  HostedZoneId:
+    Type: String
+    Description: Route53 hosted zone ID for the domain
+    Default: ""
+
+  CloudFrontAcmCertificateArn:
+    Type: String
+    Description: ACM certificate ARN in us-east-1 for CloudFront (must be in us-east-1)
+    Default: ""
+  
+  CloudFrontPriceClass:
+    Type: String
+    Description: CloudFront price class (geographic distribution)
+    Default: PriceClass_100
+    AllowedValues:
+      - PriceClass_100  # US, Canada, Europe
+      - PriceClass_200  # + Asia, Africa, Oceania, Middle East
+      - PriceClass_All  # All edge locations
+  
+  # ----------------------
+  # Api & Security Configuration
+  # ----------------------
+
+  EnableWaf:
+    Type: String
+    Description: Enable WAF for CloudFront distribution (true|false)
+    Default: "false"
+    AllowedValues:
+      - "true"
+      - "false"
+
+  JwtIssuer:
+    Type: String
+    Description: JWT issuer URL (leave empty to disable JWT auth)
+    Default: ""
+
+  JwtAudience:
+    Type: String
+    Description: JWT audience/client ID (leave empty to disable JWT auth)
+    Default: ""
+
+  ThrottleBurstLimit:
+    Type: Number
+    Description: API Gateway throttle burst limit
+    Default: 500
+    MinValue: 0
+    MaxValue: 10000
+
+  ThrottleRateLimit:
+    Type: Number
+    Description: API Gateway throttle rate limit (requests per second)
+    Default: 100
+    MinValue: 0
+    MaxValue: 10000
+
+  # ----------------------
+  # Observability Configuration
+  # ----------------------
+
+  AlarmEmail:
+    Type: String
+    Description: Email address for CloudWatch alarm notifications (leave empty to disable)
+    Default: ""
+
+  EnableAlarms:
+    Type: String
+    Description: Enable CloudWatch alarms (true|false)
+    Default: "false"
+    AllowedValues:
+      - "true"
+      - "false"
+
+  EnableDashboards:
+    Type: String
+    Description: Enable CloudWatch dashboards (true|false)
+    Default: "false"
+    AllowedValues:
+      - "true"
+      - "false"
+
+  # ----------------------
+  # Template Locations
+  # ----------------------
+
+  TemplatesBucket:
+    Type: String
+    Description: S3 bucket containing nested CloudFormation templates
+    AllowedPattern: '^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$'
+    ConstraintDescription: >
+      Must be a valid S3 bucket name (3-63 characters, lowercase letters,
+      numbers, dots, and hyphens only).
+
+  TemplatesPrefix:
+    Type: String
+    Description: S3 key prefix for nested templates with no trailing slash (e.g. prod/1.0.0)
+    Default: ""
+
+
+
+Conditions:
+
+  IsProd: !Equals [!Ref Environment, prod]
+
+
+
+Resources:
+
+  DataStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub "https://${TemplatesBucket}.s3.${AWS::Region}.amazonaws.com/${TemplatesPrefix}/data.yaml"
+      Parameters:
+        ProjectName: !Ref ProjectName
+        Environment: !Ref Environment
+        EnablePointInTimeRecovery: !Ref EnablePointInTimeRecovery
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Stack
+          Value: Data
+
+  ComputeStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn: DataStack
+    Properties:
+      TemplateURL: !Sub "https://${TemplatesBucket}.s3.${AWS::Region}.amazonaws.com/${TemplatesPrefix}/compute.yaml"
+      Parameters:
+        ProjectName: !Ref ProjectName
+        Environment: !Ref Environment
+        LambdaCodeBucket: !Ref LambdaCodeBucket
+        LambdaCodeKey: !Ref LambdaCodeKey
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Stack
+          Value: Compute
+
+  ApiStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn: ComputeStack
+    Properties:
+      TemplateURL: !Sub "https://${TemplatesBucket}.s3.${AWS::Region}.amazonaws.com/${TemplatesPrefix}/api.yaml"
+      Parameters:
+        ProjectName: !Ref ProjectName
+        Environment: !Ref Environment
+        JwtIssuer: !Ref JwtIssuer
+        JwtAudience: !Ref JwtAudience
+        ThrottleBurstLimit: !Ref ThrottleBurstLimit
+        ThrottleRateLimit: !Ref ThrottleRateLimit
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Stack
+          Value: API
+
+  EdgeStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn: ApiStack
+    Properties:
+      TemplateURL: !Sub "https://${TemplatesBucket}.s3.${AWS::Region}.amazonaws.com/${TemplatesPrefix}/edge.yaml"
+      Parameters:
+        ProjectName: !Ref ProjectName
+        Environment: !Ref Environment
+        WebsiteBucketName: !Ref WebsiteBucketName
+        DomainName: !Ref DomainName
+        HostedZoneId: !Ref HostedZoneId
+        CloudFrontAcmCertificateArn: !Ref CloudFrontAcmCertificateArn
+        EnableWaf: !Ref EnableWaf
+        CloudFrontPriceClass: !Ref CloudFrontPriceClass
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Stack
+          Value: Edge
+
+  ObservabilityStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn:
+      - DataStack
+      - ComputeStack
+      - ApiStack
+    Properties:
+      TemplateURL: !Sub "https://${TemplatesBucket}.s3.${AWS::Region}.amazonaws.com/${TemplatesPrefix}/observability.yaml"
+      Parameters:
+        ProjectName: !Ref ProjectName
+        Environment: !Ref Environment
+        AlarmEmail: !Ref AlarmEmail
+        EnableAlarms: !Ref EnableAlarms
+        EnableDashboards: !Ref EnableDashboards
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Stack
+          Value: Observability
+
+
+
+Outputs:
+
+  # ----------------------
+  # Website Outputs
+  # ----------------------
+
+  WebsiteUrl:
+    Description: Website URL
+    Value: !GetAtt EdgeStack.Outputs.WebsiteUrl
+
+  CloudFrontDistributionId:
+    Description: CloudFront distribution ID (for invalidations)
+    Value: !GetAtt EdgeStack.Outputs.CloudFrontDistributionId
+
+  CloudFrontDistributionDomainName:
+    Description: CloudFront distribution domain name
+    Value: !GetAtt EdgeStack.Outputs.CloudFrontDistributionDomainName
+
+  # ----------------------
+  # API Outputs
+  # ----------------------
+
+  ApiEndpoint:
+    Description: API Gateway endpoint URL
+    Value: !GetAtt ApiStack.Outputs.HttpApiEndpoint
+
+  ApiStageUrl:
+    Description: Full API stage URL
+    Value: !GetAtt ApiStack.Outputs.ApiStageUrl
+
+  # ----------------------
+  # Database Outputs
+  # ----------------------
+
+  ProductsTableName:
+    Description: Products DynamoDB table name
+    Value: !GetAtt DataStack.Outputs.ProductsTableName
+
+  CartsTableName:
+    Description: Carts DynamoDB table name
+    Value: !GetAtt DataStack.Outputs.CartsTableName
+
+  OrdersTableName:
+    Description: Orders DynamoDB table name
+    Value: !GetAtt DataStack.Outputs.OrdersTableName
+
+  # ----------------------
+  # Lambda Outputs
+  # ----------------------
+
+  ProductsFunctionName:
+    Description: Products Lambda function name
+    Value: !GetAtt ComputeStack.Outputs.ProductsFunctionName
+
+  CartFunctionName:
+    Description: Cart Lambda function name
+    Value: !GetAtt ComputeStack.Outputs.CartFunctionName
+
+  CheckoutFunctionName:
+    Description: Checkout Lambda function name
+    Value: !GetAtt ComputeStack.Outputs.CheckoutFunctionName
+
+  OrdersFunctionName:
+    Description: Orders Lambda function name
+    Value: !GetAtt ComputeStack.Outputs.OrdersFunctionName
+
+  # ----------------------
+  # Monitoring Outputs
+  # ----------------------
+
+  DashboardUrl:
+    Description: CloudWatch Dashboard URL
+    Value: !GetAtt ObservabilityStack.Outputs.DashboardUrl
+
+  AlarmTopicArn:
+    Description: SNS Topic ARN for alarms
+    Value: !GetAtt ObservabilityStack.Outputs.AlarmTopicArn

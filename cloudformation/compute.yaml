@@ -14,19 +14,10 @@ Parameters:
   Environment:
     Type: String
 
-  LambdaCodeBucket:
+  LambdaBucketName:
     Type: String
 
-  KeyProductsLambda:
-    Type: String
-
-  KeyCartLambda:
-    Type: String
-
-  KeyCheckoutLambda:
-    Type: String
-
-  KeyOrdersLambda:
+  LambdaCodeKey:
     Type: String
 
 
@@ -221,8 +212,8 @@ Resources:
       Handler: index.handler
       Role: !GetAtt ProductsLambdaRole.Arn
       Code:
-        S3Bucket: !Ref LambdaCodeBucket
-        S3Key: !Ref KeyCartLambda
+        S3Bucket: !Ref LambdaBucketName
+        S3Key: !Ref "${LambdaCodeKey}/products.zip"
       Environment:
         Variables:
           PRODUCTS_TABLE: !ImportValue
@@ -252,8 +243,8 @@ Resources:
       Handler: index.handler
       Role: !GetAtt CartLambdaRole.Arn
       Code:
-        S3Bucket: !Ref LambdaCodeBucket
-        S3Key: !Ref KeyProductsLambda
+        S3Bucket: !Ref LambdaBucketName
+        S3Key: !Ref "${LambdaCodeKey}/cart.zip"
       Environment:
         Variables:
           CARTS_TABLE: !ImportValue
@@ -286,8 +277,8 @@ Resources:
       Handler: index.handler
       Role: !GetAtt CheckoutLambdaRole.Arn
       Code:
-        S3Bucket: !Ref LambdaCodeBucket
-        S3Key: !Ref KeyCheckoutLambda
+        S3Bucket: !Ref LambdaBucketName
+        S3Key: !Ref "${LambdaCodeKey}/checkout.zip"
       Environment:
         Variables:
           CARTS_TABLE: !ImportValue
@@ -322,8 +313,8 @@ Resources:
       Handler: index.handler
       Role: !GetAtt OrdersLambdaRole.Arn
       Code:
-        S3Bucket: !Ref LambdaCodeBucket
-        S3Key: !Ref KeyOrdersLambda
+        S3Bucket: !Ref LambdaBucketName
+        S3Key: !Ref "${LambdaCodeKey}/orders.zip"
       Environment:
         Variables:
           ORDERS_TABLE: !ImportValue 
