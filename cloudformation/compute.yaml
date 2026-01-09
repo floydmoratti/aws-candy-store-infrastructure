@@ -353,35 +353,35 @@ Resources:
 
   ProductsFunctionLogGroup:
     Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
     Properties:
       LogGroupName: !Sub "/aws/lambda/${ProductsFunction}"
       RetentionInDays: !If [IsProd, 30, 7]
-    DeletionPolicy: Delete
-    UpdateReplacePolicy: Delete
 
   CartFunctionLogGroup:
     Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
     Properties:
       LogGroupName: !Sub "/aws/lambda/${CartFunction}"
       RetentionInDays: !If [IsProd, 30, 7]
-    DeletionPolicy: Delete
-    UpdateReplacePolicy: Delete
 
   CheckoutFunctionLogGroup:
     Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
     Properties:
       LogGroupName: !Sub "/aws/lambda/${CheckoutFunction}"
       RetentionInDays: !If [IsProd, 30, 7]
-    DeletionPolicy: Delete
-    UpdateReplacePolicy: Delete
 
   OrdersFunctionLogGroup:
     Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
     Properties:
       LogGroupName: !Sub "/aws/lambda/${OrdersFunction}"
       RetentionInDays: !If [IsProd, 30, 7]
-    DeletionPolicy: Delete
-    UpdateReplacePolicy: Delete
   
 
 

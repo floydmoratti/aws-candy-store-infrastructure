@@ -1,0 +1,523 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Edge stack for aws-ecommerce-infrastructure.
+  Creates CloudFront distribution with S3 origin for static content,
+  API Gateway origin for /api/* routes, Route53 DNS, WAF, and security features.
+
+
+
+Parameters:
+
+  ProjectName:
+    Type: String
+
+  Environment:
+    Type: String
+
+  WebsiteBucketName:
+    Type: String
+
+  DomainName:
+    Type: String
+
+  HostedZoneId:
+    Type: String
+
+  CloudFrontAcmCertificateArn:
+    Type: String
+
+  EnableWaf:
+    Type: String
+
+  CloudFrontPriceClass:
+    Type: String
+
+
+
+Conditions:
+
+  IsProd: !Equals [!Ref Environment, prod]
+  HasDomain: !Not [!Equals [!Ref DomainName, ""]]
+  HasCertificate: !Not [!Equals [!Ref CloudFrontAcmCertificateArn, ""]]
+  HasHostedZone: !Not [!Equals [!Ref HostedZoneId, ""]]
+  EnableDnsRecords: !And
+    - !Condition HasDomain
+    - !Condition HasHostedZone
+  EnableCustomDomain: !And
+    - !Condition HasDomain
+    - !Condition HasCertificate
+  ShouldEnableWaf: !Or
+    - !Equals [!Ref EnableWaf, "true"]
+    - !Condition IsProd
+
+
+
+Resources:
+
+  # ----------------------
+  # CloudFront Logging Bucket
+  # ----------------------
+
+  CloudFrontLogsBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: !If [IsProd, Retain, Delete]
+    UpdateReplacePolicy: !If [IsProd, Retain, Delete]
+    Properties:
+      BucketName: !Sub "${ProjectName}-${Environment}-cloudfront-logs"
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteOldLogs
+            Status: Enabled
+            ExpirationInDays: !If [IsProd, 90, 30]
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerPreferred
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-cloudfront-logs"
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+
+
+  # ----------------------
+  # S3 Bucket Policy for CloudFront OAC
+  # ----------------------
+
+  WebsiteBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref CloudFrontLogsBucket
+      PolicyDocument:
+        Statement:
+          - Sid: AllowCloudFrontServicePrincipal
+            Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: s3:GetObject
+            Resource: !Sub "arn:${AWS::Partition}:s3:::${WebsiteBucketName}/*"
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub "arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${CloudFrontDistribution}"
+
+
+  # ----------------------
+  # CloudFront Origin Access Control
+  # ----------------------
+
+  CloudFrontOriginAccessControl:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub "${ProjectName}-${Environment}-oac"
+        Description: !Sub "Origin Access Control for ${ProjectName} ${Environment}"
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+
+  # ----------------------
+  # CloudFront Response Headers Policy
+  # ----------------------
+
+  SecurityHeadersPolicy:
+    Type: AWS::CloudFront::ResponseHeadersPolicy
+    Properties:
+      ResponseHeadersPolicyConfig:
+        Name: !Sub "${ProjectName}-${Environment}-security-headers"
+        Comment: Security headers for enhanced protection
+        SecurityHeadersConfig:
+          StrictTransportSecurity:
+            AccessControlMaxAgeSec: 31536000  # 1 year
+            IncludeSubdomains: true
+            Preload: true
+            Override: true
+          ContentTypeOptions:
+            Override: true
+          FrameOptions:
+            FrameOption: DENY
+            Override: true
+          ReferrerPolicy:
+            ReferrerPolicy: strict-origin-when-cross-origin
+            Override: true
+          XSSProtection:
+            ModeBlock: true
+            Protection: true
+            Override: true
+          ContentSecurityPolicy:
+            ContentSecurityPolicy: "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https:;"
+            Override: true
+        CustomHeadersConfig:
+          Items:
+            - Header: X-Environment
+              Value: !Ref Environment
+              Override: false
+            - Header: Permissions-Policy
+              Value: "camera=(), microphone=(), geolocation=()"
+              Override: true
+
+
+  # ----------------------
+  # CloudFront Cache Policies
+  # ----------------------
+
+  StaticCachePolicy:
+    Type: AWS::CloudFront::CachePolicy
+    Properties:
+      CachePolicyConfig:
+        Name: !Sub "${ProjectName}-${Environment}-static-cache"
+        Comment: Optimized caching for static content
+        DefaultTTL: 86400  # 1 day
+        MaxTTL: 31536000  # year
+        MinTTL: 1
+        ParametersInCacheKeyAndForwardedToOrigin:
+          EnableAcceptEncodingGzip: true
+          EnableAcceptEncodingBrotli: true
+          QueryStringsConfig:
+            QueryStringBehavior: none
+          HeadersConfig:
+            HeaderBehavior: none
+          CookiesConfig:
+            CookieBehavior: none
+
+  ApiCachePolicy:
+    Type: AWS::CloudFront::CachePolicy
+    Properties:
+      CachePolicyConfig:
+        Name: !Sub "${ProjectName}-${Environment}-api-no-cache"
+        Comment: No caching for dynamic API content
+        DefaultTTL: 0
+        MaxTTL: 0
+        MinTTL: 0
+        ParametersInCacheKeyAndForwardedToOrigin:
+          EnableAcceptEncodingGzip: true
+          EnableAcceptEncodingBrotli: true
+          QueryStringsConfig:
+            QueryStringBehavior: all
+          HeadersConfig:
+            HeaderBehavior: whitelist
+            Headers:
+              - Authorization
+              - CloudFront-Viewer-Country
+              - CloudFront-Is-Mobile-Viewer
+              - CloudFront-Is-Desktop-Viewer
+          CookiesConfig:
+            CookieBehavior: all
+  
+
+  # ----------------------
+  # CloudFront Origin Request Policy for API
+  # ----------------------
+
+  ApiOriginRequestPolicy:
+    Type: AWS::CloudFront::OriginRequestPolicy
+    Properties:
+      OriginRequestPolicyConfig:
+        Name: !Sub "${ProjectName}-${Environment}-api-origin"
+        Comment: Forward all headers/cookies for API requests
+        QueryStringsConfig:
+          QueryStringBehavior: all
+        HeadersConfig:
+          HeaderBehavior: allViewerAndWhitelistCloudFront
+          Headers:
+            - CloudFront-Viewer-Address
+            - CloudFront-Viewer-Country
+        CookiesConfig:
+          CookieBehavior: all
+
+
+  # ----------------------
+  # WAF WebACL (Optional)
+  # ----------------------
+
+  WebACL:
+    Type: AWS::WAFv2::WebACL
+    Condition: ShouldEnableWaf
+    Properties:
+      Name: !Sub "${ProjectName}-${Environment}-waf"
+      Scope: CLOUDFRONT
+      Description: !Sub "WAF for ${ProjectName} ${Environment}"
+      DefaultAction:
+        Allow: {}
+      Rules:
+        # Rate limiting - 2000 requests per 5 minutes per IP
+        - Name: RateLimitRule
+          Priority: 1
+          Statement:
+            RateBasedStatement:
+              Limit: 2000
+              AggregateKeyType: IP
+          Action:
+            Block:
+              CustomResponse:
+                ResponseCode: 429
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: !Sub "${ProjectName}-${Environment}-rate-limit"
+        # AWS Managed Rules - Core Rule Set
+        - Name: AWSManagedRulesCommonRuleSet
+          Priority: 2
+          OverrideAction:
+            None: {}
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesCommonRuleSet
+              ExcludedRules: []
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: !Sub "${ProjectName}-${Environment}-common-rules"
+        # AWS Managed Rules - Known Bad Inputs
+        - Name: AWSManagedRulesKnownBadInputsRuleSet
+          Priority: 3
+          OverrideAction:
+            None: {}
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesKnownBadInputsRuleSet
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: !Sub "${ProjectName}-${Environment}-bad-inputs"
+        # AWS Managed Rules - SQL Injection
+        - Name: AWSManagedRulesSQLiRuleSet
+          Priority: 4
+          OverrideAction:
+            None: {}
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesSQLiRuleSet
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: !Sub "${ProjectName}-${Environment}-sqli"
+      VisibilityConfig:
+          SampledRequestsEnabled: true
+          CloudWatchMetricsEnabled: true
+          MetricName: !Sub "${ProjectName}-${Environment}-waf"
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-waf"
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+
+
+  # ----------------------
+  # CloudFront Distribution
+  # ----------------------
+
+  CloudFrontDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Comment: !Sub "${ProjectName} ${Environment} - Static site and API"
+        Enabled: true
+        HttpVersion: http2and3
+        IPV6Enabled: true
+        PriceClass: !Ref CloudFrontPriceClass
+      
+        # Custom domain configuration
+        Aliases: !If
+          - EnableCustomDomain
+          - !If
+            - IsProd
+            - [!Ref DomainName]
+            - [!Sub "${Environment}.${DomainName}"]
+          - !Ref AWS::NoValue
+        
+        ViewerCertificate: !If
+          - EnableCustomDomain
+          - AcmCertificateArn: !Ref CloudFrontAcmCertificateArn
+            SslSupportMethod: sni-only
+            MinimumProtocolVersion: TLSv1.2_2021
+          - CloudFrontDefaultCertificate: true
+        
+        Origins:
+          - Id: S3Origin
+            DomainName: !Sub "${WebsiteBucketName}.s3.${AWS::Region}.amazonaws.com"
+            OriginAccessControlId: !GetAtt CloudFrontOriginAccessControl.Id
+            S3OriginConfig:
+              OriginAccessIdentity: ""
+            OriginShield:
+              Enabled: !If [IsProd, true, false]
+              OriginShieldRegion: !If [IsProd, !Ref AWS::Region, !Ref AWS::NoValue]
+          - Id: ApiGatewayOrigin
+            DomainName:
+              Fn::ImportValue: !Sub "${ProjectName}-${Environment}-ApiGatewayDomainName"
+            CustomOriginConfig:
+              HTTPSPort: 443
+              OriginProtocolPolicy: https-only
+              OriginSSLProtocols:
+                - TLSv1.2
+              OriginReadTimeout: 60
+              OriginKeepaliveTimeout: 5
+            OriginShield:
+              Enabled: false
+        
+        DefaultCacheBehavior:
+          TargetOriginId: S3Origin
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods:
+            - GET
+            - HEAD
+            - OPTIONS
+          CachedMethods:
+            - GET
+            - HEAD
+            - OPTIONS
+          Compress: true
+          CachePolicyId: !Ref StaticCachePolicy
+          ResponseHeadersPolicyId: !Ref SecurityHeadersPolicy
+        CacheBehaviors:
+          - PathPattern: /api/*
+            TargetOriginId: ApiGatewayOrigin
+            ViewerProtocolPolicy: https-only
+            AllowedMethods:
+              - GET
+              - HEAD
+              - OPTIONS
+              - PUT
+              - POST
+              - PATCH
+              - DELETE
+            CachedMethods:
+              - GET
+              - HEAD
+              - OPTIONS
+            Compress: true
+            CachePolicyId: !Ref ApiCachePolicy
+            OriginRequestPolicyId: !Ref ApiOriginRequestPolicy
+            ResponseHeadersPolicyId: !Ref SecurityHeadersPolicy
+        
+        CustomErrorResponses:
+          - ErrorCode: 403  # access denied
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+            ErrorCachingMinTTL: 300
+          - ErrorCode: 404  # not found
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+            ErrorCachingMinTTL: 300
+          - ErrorCode: 500  # origin crash
+            ErrorCachingMinTTL: 10
+          - ErrorCode: 502  # invalid response from origin
+            ErrorCachingMinTTL: 10
+          - ErrorCode: 503  # origin is down
+            ErrorCachingMinTTL: 10
+          - ErrorCode: 504  # origin took too long to respond
+            ErrorCachingMinTTL: 10
+        
+        DefaultRootObject: index.html
+        Logging:
+          Bucket: !GetAtt CloudFrontLogsBucket.DomainName
+          IncludeCookies: false
+          Prefix: !Sub "${Environment}/"
+        WebACLId: !If
+          - ShouldEnableWaf
+          - !GetAtt WebACL.Arn
+          - !Ref AWS::NoValue
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-cloudfront"
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+
+
+  # ----------------------
+  # Route53 DNS Records
+  # ----------------------
+
+  Route53RecordSetGroup:
+    Type: AWS::Route53::RecordSetGroup
+    Condition: EnableDnsRecords
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      RecordSets:
+        - Name: !If
+          - IsProd
+          - !Ref DomainName
+          - !Sub "${Environment}.${DomainName}"
+          Type: A  # IPv4
+          AliasTarget:
+            HostedZoneId: Z2FDTNDATAQYW2  # CloudFront
+            DNSName: !GetAtt CloudFrontDistribution.DomainName
+            EvaluateTargetHealth: false
+        - Name: !If
+          - IsProd
+          - !Ref DomainName
+          - !Sub "${Environment}.${DomainName}"
+          Type: AAAA  # IPv6
+          AliasTarget:
+            HostedZoneId: Z2FDTNDATAQYW2  # CloudFront
+            DNSName: !GetAtt CloudFrontDistribution.DomainName
+            EvaluateTargetHealth: false
+    
+
+
+Outputs:
+
+  CloudFrontDistributionId:
+    Description: CloudFront distribution ID
+    Value: !Ref CloudFrontDistribution
+    Export:
+      Name: !Sub "${ProjectName}-${Environment}-CloudFrontDistributionId"
+
+  CloudFrontDistributionDomainName:
+    Description: CloudFront distribution domain name
+    Value: !GetAtt CloudFrontDistribution.DomainName
+    Export:
+      Name: !Sub "${ProjectName}-${Environment}-CloudFrontDistributionDomainName"
+
+  WebsiteUrl:
+    Description: Website URL
+    Value: !If
+      - EnableCustomDomain
+      - !Sub
+        - "https://${Domain}"
+        - Domain: !If
+          - IsProd
+          - !Ref DomainName
+          - !Sub "${Environment}.${DomainName}"
+      - !Sub "https://${CloudFrontDistribution.DomainName}"
+
+  CloudFrontLogsBucketName:
+    Description: CloudFront logs bucket name
+    Value: !Ref CloudFrontLogsBucket
+    Export:
+      Name: !Sub "${ProjectName}-${Environment}-CloudFrontLogsBucketName"
+
+  WafWebAclId:
+    Description: WAF WebACL ID (if enabled)
+    Condition: ShouldEnableWaf
+    Value: !GetAtt WebACL.Arn
+    Export:
+      Name: !Sub "${ProjectName}-${Environment}-WafWebAclId"
+
+  WafWebAclArn:
+    Description: WAF WebACL ARN (if enabled)
+    Condition: ShouldEnableWaf
+    Value: !GetAtt WebACL.Arn
+
+  SecurityHeadersPolicyId:
+    Description: CloudFront security headers policy ID
+    Value: !Ref SecurityHeadersPolicy
+    Export:
+      Name: !Sub "${ProjectName}-${Environment}-SecurityHeadersPolicyId"
