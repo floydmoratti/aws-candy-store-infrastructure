@@ -226,10 +226,18 @@ Parameters:
 
 
 
+Conditions:
+
+  IsProd: !Equals [!Ref Environment, prod]
+
+
+
 Resources:
 
   DataStack:
     Type: AWS::CloudFormation::Stack
+    DeletionPolicy: !If [IsProd, RetainExceptOnCreate, Delete]
+    UpdateReplacePolicy: !If [IsProd, Retain, Delete]
     Properties:
       TemplateURL: !Sub "https://${TemplatesBucket}.s3.${AWS::Region}.amazonaws.com/${TemplatesPrefix}/data.yaml"
       Parameters:
@@ -247,6 +255,8 @@ Resources:
   ComputeStack:
     Type: AWS::CloudFormation::Stack
     DependsOn: DataStack
+    DeletionPolicy: !If [IsProd, RetainExceptOnCreate, Delete]
+    UpdateReplacePolicy: !If [IsProd, Retain, Delete]
     Properties:
       TemplateURL: !Sub "https://${TemplatesBucket}.s3.${AWS::Region}.amazonaws.com/${TemplatesPrefix}/compute.yaml"
       Parameters:
@@ -265,6 +275,8 @@ Resources:
   ApiStack:
     Type: AWS::CloudFormation::Stack
     DependsOn: ComputeStack
+    DeletionPolicy: !If [IsProd, RetainExceptOnCreate, Delete]
+    UpdateReplacePolicy: !If [IsProd, Retain, Delete]
     Properties:
       TemplateURL: !Sub "https://${TemplatesBucket}.s3.${AWS::Region}.amazonaws.com/${TemplatesPrefix}/api.yaml"
       Parameters:
@@ -285,6 +297,8 @@ Resources:
   EdgeStack:
     Type: AWS::CloudFormation::Stack
     DependsOn: ApiStack
+    DeletionPolicy: !If [IsProd, RetainExceptOnCreate, Delete]
+    UpdateReplacePolicy: !If [IsProd, Retain, Delete]
     Properties:
       TemplateURL: !Sub "https://${TemplatesBucket}.s3.${AWS::Region}.amazonaws.com/${TemplatesPrefix}/edge.yaml"
       Parameters:
@@ -310,6 +324,8 @@ Resources:
       - DataStack
       - ComputeStack
       - ApiStack
+    DeletionPolicy: !If [IsProd, RetainExceptOnCreate, Delete]
+    UpdateReplacePolicy: !If [IsProd, Retain, Delete]
     Properties:
       TemplateURL: !Sub "https://${TemplatesBucket}.s3.${AWS::Region}.amazonaws.com/${TemplatesPrefix}/observability.yaml"
       Parameters:

@@ -213,7 +213,7 @@ Resources:
       Role: !GetAtt ProductsLambdaRole.Arn
       Code:
         S3Bucket: !Ref LambdaBucketName
-        S3Key: !Ref "${LambdaCodeKey}/products.zip"
+        S3Key: !Sub "${LambdaCodeKey}/products.zip"
       Environment:
         Variables:
           PRODUCTS_TABLE: !ImportValue
@@ -244,7 +244,7 @@ Resources:
       Role: !GetAtt CartLambdaRole.Arn
       Code:
         S3Bucket: !Ref LambdaBucketName
-        S3Key: !Ref "${LambdaCodeKey}/cart.zip"
+        S3Key: !Sub "${LambdaCodeKey}/cart.zip"
       Environment:
         Variables:
           CARTS_TABLE: !ImportValue
@@ -278,7 +278,7 @@ Resources:
       Role: !GetAtt CheckoutLambdaRole.Arn
       Code:
         S3Bucket: !Ref LambdaBucketName
-        S3Key: !Ref "${LambdaCodeKey}/checkout.zip"
+        S3Key: !Sub "${LambdaCodeKey}/checkout.zip"
       Environment:
         Variables:
           CARTS_TABLE: !ImportValue
@@ -314,7 +314,7 @@ Resources:
       Role: !GetAtt OrdersLambdaRole.Arn
       Code:
         S3Bucket: !Ref LambdaBucketName
-        S3Key: !Ref "${LambdaCodeKey}/orders.zip"
+        S3Key: !Sub "${LambdaCodeKey}/orders.zip"
       Environment:
         Variables:
           ORDERS_TABLE: !ImportValue 
