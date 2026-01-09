@@ -1,0 +1,444 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Observability stack for aws-ecommerce-infrastructure.
+  Creates CloudWatch alarms, dashboards, and SNS topics for monitoring
+  Lambda, DynamoDB, API Gateway, and CloudFront.
+
+
+
+Parameters:
+
+  ProjectName:
+    Type: String
+
+  Environment:
+    Type: String
+
+  AlarmEmail:
+    Type: String
+
+  EnableAlarms:
+    Type: String
+
+  EnableDashboards:
+    Type: String
+
+
+
+Conditions:
+
+  HasAlarmEmail: !Not [!Equals [!Ref AlarmEmail, ""]]
+  EnableAlarmsCondition: !Equals [!Ref EnableAlarms, "true"]
+  EnableDashboardsCondition: !Equals [!Ref EnableDashboards, "true"]
+  CreateTopic: !And
+    - !Condition EnableAlarmsCondition
+    - !Condition HasAlarmEmail
+
+
+
+Resources:
+
+  # ----------------------
+  # SNS Topic for Alarms
+  # ----------------------
+
+  AlarmTopic:
+    Type: AWS::SNS::Topic
+    Condition: CreateTopic
+    Properties:
+      TopicName: !Sub "${ProjectName}-${Environment}-alarms"
+      DisplayName: !Sub "${ProjectName} ${Environment} Alarms"
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+
+  AlarmTopicSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: CreateTopic
+    Properties:
+      Protocol: email
+      TopicArn: !Ref AlarmTopic
+      Endpoint: !Ref AlarmEmail
+
+
+  # ----------------------
+  # Lambda Function Alarms
+  # ----------------------
+
+  ProductsFunctionErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: EnableAlarmsCondition
+    Properties:
+      AlarmName: !Sub "${ProjectName}-${Environment}-products-errors"
+      AlarmDescription: Products Lambda function error rate is high
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 5
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !ImportValue
+            Fn::Sub: "${ProjectName}-${Environment}-ProductsFunctionName"
+      TreatMissingData: notBreaching
+      AlarmActions: !If
+        - HasAlarmEmail
+        - [!Ref AlarmTopic]
+        - []
+
+  ProductsFunctionThrottleAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: EnableAlarmsCondition
+    Properties:
+      AlarmName: !Sub "${ProjectName}-${Environment}-products-throttles"
+      AlarmDescription: Products Lambda function is being throttled
+      MetricName: Throttles
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 5
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !ImportValue
+            Fn::Sub: "${ProjectName}-${Environment}-ProductsFunctionName"
+      TreatMissingData: notBreaching
+      AlarmActions: !If
+        - HasAlarmEmail
+        - [!Ref AlarmTopic]
+        - []
+
+  CartFunctionErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: EnableAlarmsCondition
+    Properties:
+      AlarmName: !Sub "${ProjectName}-${Environment}-cart-errors"
+      AlarmDescription: Cart Lambda function error rate is high
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 5
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !ImportValue
+            Fn::Sub: "${ProjectName}-${Environment}-CartFunctionName"
+      TreatMissingData: notBreaching
+      AlarmActions: !If
+        - HasAlarmEmail
+        - [!Ref AlarmTopic]
+        - []
+
+  CheckoutFunctionErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: EnableAlarmsCondition
+    Properties:
+      AlarmName: !Sub "${ProjectName}-${Environment}-checkout-errors"
+      AlarmDescription: Checkout Lambda function error rate is high
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 3
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !ImportValue
+            Fn::Sub: "${ProjectName}-${Environment}-CheckoutFunctionName"
+      TreatMissingData: notBreaching
+      AlarmActions: !If
+        - HasAlarmEmail
+        - [!Ref AlarmTopic]
+        - []
+
+  OrdersFunctionErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: EnableAlarmsCondition
+    Properties:
+      AlarmName: !Sub "${ProjectName}-${Environment}-orders-errors"
+      AlarmDescription: Orders Lambda function error rate is high
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 5
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !ImportValue
+            Fn::Sub: "${ProjectName}-${Environment}-OrdersFunctionName"
+      TreatMissingData: notBreaching
+      AlarmActions: !If
+        - HasAlarmEmail
+        - [!Ref AlarmTopic]
+        - []
+
+
+  # ----------------------
+  # DynamoDB Alarms
+  # ----------------------
+
+  ProductsTableReadThrottleAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: EnableAlarmsCondition
+    Properties:
+      AlarmName: !Sub "${ProjectName}-${Environment}-products-read-throttle"
+      AlarmDescription: Products table read requests are being throttled
+      MetricName: ReadThrottleEvents
+      Namespace: AWS/DynamoDB
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 10
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: TableName
+          Value: !ImportValue
+            Fn::Sub: "${ProjectName}-${Environment}-ProductsTableName"
+      TreatMissingData: notBreaching
+      AlarmActions: !If
+        - HasAlarmEmail
+        - [!Ref AlarmTopic]
+        - []
+
+  ProductsTableWriteThrottleAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: EnableAlarmsCondition
+    Properties:
+      AlarmName: !Sub "${ProjectName}-${Environment}-products-write-throttle"
+      AlarmDescription: Products table write requests are being throttled
+      MetricName: WriteThrottleEvents
+      Namespace: AWS/DynamoDB
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 10
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: TableName
+          Value: !ImportValue
+            Fn::Sub: "${ProjectName}-${Environment}-ProductsTableName"
+      TreatMissingData: notBreaching
+      AlarmActions: !If
+        - HasAlarmEmail
+        - [!Ref AlarmTopic]
+        - []
+
+  OrdersTableReadThrottleAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: EnableAlarmsCondition
+    Properties:
+      AlarmName: !Sub "${ProjectName}-${Environment}-orders-read-throttle"
+      AlarmDescription: Orders table read requests are being throttled
+      MetricName: ReadThrottleEvents
+      Namespace: AWS/DynamoDB
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 10
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: TableName
+          Value: !ImportValue
+            Fn::Sub: "${ProjectName}-${Environment}-OrdersTableName"
+      TreatMissingData: notBreaching
+      AlarmActions: !If
+        - HasAlarmEmail
+        - [!Ref AlarmTopic]
+        - []
+
+
+  # ----------------------
+  # API Gateway Alarms
+  # ----------------------
+
+  Api4xxErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: EnableAlarmsCondition
+    Properties:
+      AlarmName: !Sub "${ProjectName}-${Environment}-api-4xx-errors"
+      AlarmDescription: API Gateway 4xx error rate is high
+      MetricName: 4XXError
+      Namespace: AWS/ApiGateway
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 50
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: ApiId
+          Value: !ImportValue
+            Fn::Sub: "${ProjectName}-${Environment}-HttpApiId"
+      TreatMissingData: notBreaching
+      AlarmActions: !If
+        - HasAlarmEmail
+        - [!Ref AlarmTopic]
+        - []
+
+  Api5xxErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: EnableAlarmsCondition
+    Properties:
+      AlarmName: !Sub "${ProjectName}-${Environment}-api-5xx-errors"
+      AlarmDescription: API Gateway 5xx error rate is high (critical)
+      MetricName: 5XXError
+      Namespace: AWS/ApiGateway
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 10
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: ApiId
+          Value: !ImportValue
+            Fn::Sub: "${ProjectName}-${Environment}-HttpApiId"
+      TreatMissingData: notBreaching
+      AlarmActions: !If
+        - HasAlarmEmail
+        - [!Ref AlarmTopic]
+        - []
+
+  ApiLatencyAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: EnableAlarmsCondition
+    Properties:
+      AlarmName: !Sub "${ProjectName}-${Environment}-api-high-latency"
+      AlarmDescription: API Gateway latency is high
+      MetricName: IntegrationLatency
+      Namespace: AWS/ApiGateway
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 3000
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: ApiId
+          Value: !ImportValue
+            Fn::Sub: "${ProjectName}-${Environment}-HttpApiId"
+      TreatMissingData: notBreaching
+      AlarmActions: !If
+        - HasAlarmEmail
+        - [!Ref AlarmTopic]
+        - []
+
+
+  # ----------------------
+  # CloudWatch Dashboard
+  # ----------------------
+
+  ApplicationDashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Condition: EnableDashboardsCondition
+    Properties:
+      DashboardName: !Sub "${ProjectName}-${Environment}-overview"
+      DashboardBody: !Sub |
+        {
+          "widgets": [
+            {
+              "type": "metric",
+              "properties": {
+                "metrics": [
+                  ["AWS/Lambda", "Invocations", {"stat": "Sum", "label": "Products"}],
+                  ["...", {"stat": "Sum", "label": "Cart"}],
+                  ["...", {"stat": "Sum", "label": "Checkout"}],
+                  ["...", {"stat": "Sum", "label": "Orders"}]
+                ],
+                "period": 300,
+                "stat": "Sum",
+                "region": "${AWS::Region}",
+                "title": "Lambda Invocations",
+                "yAxis": {"left": {"min": 0}}
+              }
+            },
+            {
+              "type": "metric",
+              "properties": {
+                "metrics": [
+                  ["AWS/Lambda", "Errors", {"stat": "Sum", "label": "Products"}],
+                  ["...", {"stat": "Sum", "label": "Cart"}],
+                  ["...", {"stat": "Sum", "label": "Checkout"}],
+                  ["...", {"stat": "Sum", "label": "Orders"}]
+                ],
+                "period": 300,
+                "stat": "Sum",
+                "region": "${AWS::Region}",
+                "title": "Lambda Errors",
+                "yAxis": {"left": {"min": 0}}
+              }
+            },
+            {
+              "type": "metric",
+              "properties": {
+                "metrics": [
+                  ["AWS/Lambda", "Duration", {"stat": "Average", "label": "Products"}],
+                  ["...", {"stat": "Average", "label": "Cart"}],
+                  ["...", {"stat": "Average", "label": "Checkout"}],
+                  ["...", {"stat": "Average", "label": "Orders"}]
+                ],
+                "period": 300,
+                "stat": "Average",
+                "region": "${AWS::Region}",
+                "title": "Lambda Duration (ms)",
+                "yAxis": {"left": {"min": 0}}
+              }
+            },
+            {
+              "type": "metric",
+              "properties": {
+                "metrics": [
+                  ["AWS/ApiGateway", "Count", {"stat": "Sum"}],
+                  [".", "4XXError", {"stat": "Sum"}],
+                  [".", "5XXError", {"stat": "Sum"}]
+                ],
+                "period": 300,
+                "stat": "Sum",
+                "region": "${AWS::Region}",
+                "title": "API Gateway Requests & Errors",
+                "yAxis": {"left": {"min": 0}}
+              }
+            },
+            {
+              "type": "metric",
+              "properties": {
+                "metrics": [
+                  ["AWS/DynamoDB", "ConsumedReadCapacityUnits", {"stat": "Sum"}],
+                  [".", "ConsumedWriteCapacityUnits", {"stat": "Sum"}]
+                ],
+                "period": 300,
+                "stat": "Sum",
+                "region": "${AWS::Region}",
+                "title": "DynamoDB Capacity Units",
+                "yAxis": {"left": {"min": 0}}
+              }
+            }
+          ]
+        }
+
+
+
+Outputs:
+
+  AlarmTopicArn:
+    Description: SNS Topic ARN for alarms
+    Value: !If
+      - CreateTopic
+      - !Ref AlarmTopic
+      - "No alarm topic configured"
+    Export:
+      Name: !Sub "${ProjectName}-${Environment}-AlarmTopicArn"
+
+  DashboardUrl:
+    Description: CloudWatch Dashboard URL
+    Value: !If
+      - EnableDashboardsCondition
+      - !Sub "https://console.aws.amazon.com/cloudwatch/home?region=${AWS::Region}#dashboards:name=${ProjectName}-${Environment}-overview"
+      - "Dashboard not enabled"
