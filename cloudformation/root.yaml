@@ -24,10 +24,7 @@ Metadata:
           default: Lambda
         Parameters:
           - LambdaCodeBucket
-          - KeyProductsLambda
-          - KeyCartLambda
-          - KeyCheckoutLambda
-          - KeyOrdersLambda
+          - LambdaCodeKey
       
       - Label:
           default: Domain & DNS
@@ -100,7 +97,7 @@ Parameters:
   # Lambda Configuration
   # ----------------------
 
-  LambdaBucketName:
+  LambdaCodeBucket:
     Type: String
     Description: The name of the S3 bucket containing Lambda deployment packages
     AllowedPattern: '^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$'
@@ -226,12 +223,6 @@ Parameters:
     Type: String
     Description: S3 key prefix for nested templates with no trailing slash (e.g. prod/1.0.0)
     Default: ""
-
-
-
-Conditions:
-
-  IsProd: !Equals [!Ref Environment, prod]
 
 
 
@@ -414,3 +405,4 @@ Outputs:
   AlarmTopicArn:
     Description: SNS Topic ARN for alarms
     Value: !GetAtt ObservabilityStack.Outputs.AlarmTopicArn
+
