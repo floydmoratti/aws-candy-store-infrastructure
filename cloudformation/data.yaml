@@ -21,7 +21,9 @@ Parameters:
 
 Conditions:
 
+  IsDev: !Equals [!Ref Environment, dev]
   IsProd: !Equals [!Ref Environment, prod]
+  UseProvisionedThroughput: !Condition IsDev
   EnablePITR: !Or
     - !Equals [!Ref EnablePointInTimeRecovery, "true"]
     - !Condition IsProd
@@ -40,7 +42,12 @@ Resources:
     UpdateReplacePolicy: Retain
     Properties:
       TableName: !Sub "${ProjectName}-${Environment}-products"
-      BillingMode: PAY_PER_REQUEST
+      BillingMode: !If [UseProvisionedThroughput, PROVISIONED, PAY_PER_REQUEST]
+      ProvisionedThroughput: !If
+        - UseProvisionedThroughput
+        - ReadCapacityUnits: 9
+          WriteCapacityUnits: 3
+        - !Ref AWS::NoValue
       AttributeDefinitions:
         - AttributeName: productId
           AttributeType: S
@@ -60,6 +67,11 @@ Resources:
               KeyType: RANGE
           Projection:
             ProjectionType: ALL
+          ProvisionedThroughput: !If
+            - UseProvisionedThroughput
+            - ReadCapacityUnits: 8
+              WriteCapacityUnits: 2
+            - !Ref AWS::NoValue
       StreamSpecification:
         StreamViewType: NEW_AND_OLD_IMAGES  # Output before and after state of changes
       SSESpecification:
@@ -81,7 +93,12 @@ Resources:
     UpdateReplacePolicy: Delete
     Properties:
       TableName: !Sub "${ProjectName}-${Environment}-carts"
-      BillingMode: PAY_PER_REQUEST
+      BillingMode: !If [UseProvisionedThroughput, PROVISIONED, PAY_PER_REQUEST]
+      ProvisionedThroughput: !If
+        - UseProvisionedThroughput
+        - ReadCapacityUnits: 3
+          WriteCapacityUnits: 8
+        - !Ref AWS::NoValue
       AttributeDefinitions:
         - AttributeName: cartId
           AttributeType: S
@@ -97,6 +114,11 @@ Resources:
               KeyType: HASH
           Projection:
             ProjectionType: ALL
+          ProvisionedThroughput: !If
+            - UseProvisionedThroughput
+            - ReadCapacityUnits: 2
+              WriteCapacityUnits: 3
+            - !Ref AWS::NoValue
       TimeToLiveSpecification:
         AttributeName: ttl
         Enabled: true
@@ -119,7 +141,12 @@ Resources:
     UpdateReplacePolicy: Retain
     Properties:
       TableName: !Sub "${ProjectName}-${Environment}-orders"
-      BillingMode: PAY_PER_REQUEST
+      BillingMode: !If [UseProvisionedThroughput, PROVISIONED, PAY_PER_REQUEST]
+      ProvisionedThroughput: !If
+        - UseProvisionedThroughput
+        - ReadCapacityUnits: 1
+          WriteCapacityUnits: 5
+        - !Ref AWS::NoValue
       AttributeDefinitions:
         - AttributeName: orderId
           AttributeType: S
@@ -141,6 +168,11 @@ Resources:
               KeyType: RANGE
           Projection:
             ProjectionType: ALL
+          ProvisionedThroughput: !If
+            - UseProvisionedThroughput
+            - ReadCapacityUnits: 1
+              WriteCapacityUnits: 2
+            - !Ref AWS::NoValue
         - IndexName: StatusIndex
           KeySchema:
             - AttributeName: status
@@ -149,6 +181,11 @@ Resources:
               KeyType: RANGE
           Projection:
             ProjectionType: KEYS_ONLY
+          ProvisionedThroughput: !If
+            - UseProvisionedThroughput
+            - ReadCapacityUnits: 1
+              WriteCapacityUnits: 2
+            - !Ref AWS::NoValue
       StreamSpecification:
         StreamViewType: NEW_AND_OLD_IMAGES  # Output before and after state of changes
       SSESpecification:
@@ -163,6 +200,118 @@ Resources:
           Value: !Ref ProjectName
         - Key: Environment
           Value: !Ref Environment
+  
+
+  # ----------------------
+  # Auto Scaling (Dev Only)
+  # ----------------------
+
+  AutoScalingRole:
+    Type: AWS::IAM::Role
+    Condition: UseProvisionedThroughput
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: application-autoscaling.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/DynamoDBAutoscalingRole
+
+  ProductsTableWriteScalableTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    Condition: UseProvisionedThroughput
+    Properties:
+      ServiceNamespace: dynamodb
+      ResourceId: !Sub "table/${ProductsTable}"
+      ScalableDimension: dynamodb:table:WriteCapacityUnits
+      MinCapacity: 3
+      MaxCapacity: 20
+      RoleARN: !GetAtt AutoScalingRole.Arn
+
+  ProductsTableWriteScalingPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Condition: UseProvisionedThroughput
+    Properties:
+      PolicyName: !Sub "${ProjectName}-${Environment}-products-write-scaling"
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId: !Ref ProductsTableWriteScalableTarget
+      TargetTrackingScalingPolicyConfiguration:
+        TargetValue: 80.0
+        PredefinedMetricSpecification:
+          PredefinedMetricType: DynamoDBWriteCapacityUtilization
+
+  ProductsTableReadScalableTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    Condition: UseProvisionedThroughput
+    Properties:
+      ServiceNamespace: dynamodb
+      ResourceId: !Sub "table/${ProductsTable}"
+      ScalableDimension: dynamodb:table:ReadCapacityUnits
+      MinCapacity: 9
+      MaxCapacity: 20
+      RoleARN: !GetAtt AutoScalingRole.Arn
+
+  ProductsTableReadScalingPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Condition: UseProvisionedThroughput
+    Properties:
+      PolicyName: !Sub "${ProjectName}-${Environment}-products-read-scaling"
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId: !Ref ProductsTableReadScalableTarget
+      TargetTrackingScalingPolicyConfiguration:
+        TargetValue: 80.0
+        PredefinedMetricSpecification:
+          PredefinedMetricType: DynamoDBReadCapacityUtilization
+
+  # Carts Table Auto Scaling
+  CartsTableWriteScalableTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    Condition: UseProvisionedThroughput
+    Properties:
+      ServiceNamespace: dynamodb
+      ResourceId: !Sub "table/${CartsTable}"
+      ScalableDimension: dynamodb:table:WriteCapacityUnits
+      MinCapacity: 8
+      MaxCapacity: 20
+      RoleARN: !GetAtt AutoScalingRole.Arn
+
+  CartsTableWriteScalingPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Condition: UseProvisionedThroughput
+    Properties:
+      PolicyName: !Sub "${ProjectName}-${Environment}-carts-write-scaling"
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId: !Ref CartsTableWriteScalableTarget
+      TargetTrackingScalingPolicyConfiguration:
+        TargetValue: 80.0
+        PredefinedMetricSpecification:
+          PredefinedMetricType: DynamoDBWriteCapacityUtilization
+
+  CartsTableReadScalableTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    Condition: UseProvisionedThroughput
+    Properties:
+      ServiceNamespace: dynamodb
+      ResourceId: !Sub "table/${CartsTable}"
+      ScalableDimension: dynamodb:table:ReadCapacityUnits
+      MinCapacity: 3
+      MaxCapacity: 20
+      RoleARN: !GetAtt AutoScalingRole.Arn
+
+  CartsTableReadScalingPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Condition: UseProvisionedThroughput
+    Properties:
+      PolicyName: !Sub "${ProjectName}-${Environment}-carts-read-scaling"
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId: !Ref CartsTableReadScalableTarget
+      TargetTrackingScalingPolicyConfiguration:
+        TargetValue: 80.0
+        PredefinedMetricSpecification:
+          PredefinedMetricType: DynamoDBReadCapacityUtilization
 
 
 
