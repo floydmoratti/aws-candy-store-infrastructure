@@ -13,12 +13,6 @@ Parameters:
   Environment:
     Type: String
 
-  JwtIssuer:
-    Type: String
-
-  JwtAudience:
-    Type: String
-
   ThrottleBurstLimit:
     Type: Number
 
@@ -30,9 +24,6 @@ Parameters:
 Conditions:
 
   IsProd: !Equals [!Ref Environment, prod]
-  HasJwtConfig: !And
-    - !Not [!Equals [!Ref JwtIssuer, ""]]
-    - !Not [!Equals [!Ref JwtAudience, ""]]
 
 
 
@@ -80,7 +71,6 @@ Resources:
 
   JwtAuthorizer:
     Type: AWS::ApiGatewayV2::Authorizer
-    Condition: HasJwtConfig
     Properties:
       Name: !Sub "${ProjectName}-${Environment}-jwt-authorizer"
       ApiId: !Ref HttpApi
@@ -89,8 +79,9 @@ Resources:
         - $request.header.Authorization
       JwtConfiguration:
         Audience:
-          - !Ref JwtAudience
-        Issuer: !Ref JwtIssuer
+          - Fn::ImportValue: !Sub "${ProjectName}-${Environment}-CognitoUserPool"
+        Issuer:
+          Fn::ImportValue: !Sub "${ProjectName}-${Environment}-CognitoDomain"
 
 
   # ----------------------
@@ -187,8 +178,8 @@ Resources:
       ApiId: !Ref HttpApi
       RouteKey: POST /api/products
       Target: !Sub "integrations/${ProductsIntegration}"
-      AuthorizationType: !If [HasJwtConfig, JWT, NONE]
-      AuthorizerId: !If [HasJwtConfig, !Ref JwtAuthorizer, !Ref AWS::NoValue]
+      AuthorizationType: JWT
+      AuthorizerId: !Ref JwtAuthorizer
   
   UpdateProductRoute:
     Type: AWS::ApiGatewayV2::Route
@@ -196,8 +187,8 @@ Resources:
       ApiId: !Ref HttpApi
       RouteKey: PUT /api/products/{productId}
       Target: !Sub "integrations/${ProductsIntegration}"
-      AuthorizationType: !If [HasJwtConfig, JWT, NONE]
-      AuthorizerId: !If [HasJwtConfig, !Ref JwtAuthorizer, !Ref AWS::NoValue]
+      AuthorizationType: JWT
+      AuthorizerId: !Ref JwtAuthorizer
 
   DeleteProductRoute:
     Type: AWS::ApiGatewayV2::Route
@@ -205,8 +196,8 @@ Resources:
       ApiId: !Ref HttpApi
       RouteKey: DELETE /api/products/{productId}
       Target: !Sub "integrations/${ProductsIntegration}"
-      AuthorizationType: !If [HasJwtConfig, JWT, NONE]
-      AuthorizerId: !If [HasJwtConfig, !Ref JwtAuthorizer, !Ref AWS::NoValue]
+      AuthorizationType: JWT
+      AuthorizerId: !Ref JwtAuthorizer
 
 
   # ----------------------
@@ -219,8 +210,8 @@ Resources:
       ApiId: !Ref HttpApi
       RouteKey: GET /api/cart
       Target: !Sub "integrations/${CartIntegration}"
-      AuthorizationType: !If [HasJwtConfig, JWT, NONE]
-      AuthorizerId: !If [HasJwtConfig, !Ref JwtAuthorizer, !Ref AWS::NoValue]
+      AuthorizationType: JWT
+      AuthorizerId: !Ref JwtAuthorizer
 
   AddToCartRoute:
     Type: AWS::ApiGatewayV2::Route
@@ -228,8 +219,8 @@ Resources:
       ApiId: !Ref HttpApi
       RouteKey: POST /api/cart
       Target: !Sub "integrations/${CartIntegration}"
-      AuthorizationType: !If [HasJwtConfig, JWT, NONE]
-      AuthorizerId: !If [HasJwtConfig, !Ref JwtAuthorizer, !Ref AWS::NoValue]
+      AuthorizationType: JWT
+      AuthorizerId: !Ref JwtAuthorizer
 
   UpdateCartRoute:
     Type: AWS::ApiGatewayV2::Route
@@ -237,8 +228,8 @@ Resources:
       ApiId: !Ref HttpApi
       RouteKey: PUT /api/cart/{itemId}
       Target: !Sub "integrations/${CartIntegration}"
-      AuthorizationType: !If [HasJwtConfig, JWT, NONE]
-      AuthorizerId: !If [HasJwtConfig, !Ref JwtAuthorizer, !Ref AWS::NoValue]
+      AuthorizationType: JWT
+      AuthorizerId: !Ref JwtAuthorizer
 
   RemoveFromCartRoute:
     Type: AWS::ApiGatewayV2::Route
@@ -246,8 +237,8 @@ Resources:
       ApiId: !Ref HttpApi
       RouteKey: DELETE /api/cart/{itemId}
       Target: !Sub "integrations/${CartIntegration}"
-      AuthorizationType: !If [HasJwtConfig, JWT, NONE]
-      AuthorizerId: !If [HasJwtConfig, !Ref JwtAuthorizer, !Ref AWS::NoValue]
+      AuthorizationType: JWT
+      AuthorizerId: !Ref JwtAuthorizer
 
   ClearCartRoute:
     Type: AWS::ApiGatewayV2::Route
@@ -255,8 +246,8 @@ Resources:
       ApiId: !Ref HttpApi
       RouteKey: DELETE /api/cart
       Target: !Sub "integrations/${CartIntegration}"
-      AuthorizationType: !If [HasJwtConfig, JWT, NONE]
-      AuthorizerId: !If [HasJwtConfig, !Ref JwtAuthorizer, !Ref AWS::NoValue]
+      AuthorizationType: JWT
+      AuthorizerId: !Ref JwtAuthorizer
 
 
   # ----------------------
@@ -269,8 +260,8 @@ Resources:
       ApiId: !Ref HttpApi
       RouteKey: POST /api/checkout
       Target: !Sub "integrations/${CheckoutIntegration}"
-      AuthorizationType: !If [HasJwtConfig, JWT, NONE]
-      AuthorizerId: !If [HasJwtConfig, !Ref JwtAuthorizer, !Ref AWS::NoValue]
+      AuthorizationType: JWT
+      AuthorizerId: !Ref JwtAuthorizer
 
 
   # ----------------------
@@ -283,8 +274,8 @@ Resources:
       ApiId: !Ref HttpApi
       RouteKey: GET /api/orders
       Target: !Sub "integrations/${OrdersIntegration}"
-      AuthorizationType: !If [HasJwtConfig, JWT, NONE]
-      AuthorizerId: !If [HasJwtConfig, !Ref JwtAuthorizer, !Ref AWS::NoValue]
+      AuthorizationType: JWT
+      AuthorizerId: !Ref JwtAuthorizer
 
   GetOrderRoute:
     Type: AWS::ApiGatewayV2::Route
@@ -292,8 +283,8 @@ Resources:
       ApiId: !Ref HttpApi
       RouteKey: GET /api/orders/{orderId}
       Target: !Sub "integrations/${OrdersIntegration}"
-      AuthorizationType: !If [HasJwtConfig, JWT, NONE]
-      AuthorizerId: !If [HasJwtConfig, !Ref JwtAuthorizer, !Ref AWS::NoValue]
+      AuthorizationType: JWT
+      AuthorizerId: !Ref JwtAuthorizer
 
   # ----------------------
   # Routes - Default

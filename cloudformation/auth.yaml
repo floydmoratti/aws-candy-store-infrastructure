@@ -1,0 +1,72 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Auth stack for aws-ecommerce-infrastructure.
+  Creates Cognito user pool.
+
+
+
+Parameters:
+
+  ProjectName:
+    Type: String
+
+  Environment:
+    Type: String
+
+
+
+Conditions:
+
+  IsProd: !Equals [!Ref Environment, prod]
+
+
+
+Resources:
+
+  # ----------------------
+  # Cognito User Pool
+  # ----------------------
+
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    DeletionPolicy: !If [IsProd, Retain, Delete]
+    UpdateReplacePolicy: !If [IsProd, Retain, Delete]
+    Properties:
+      UserPoolName: !Sub "${ProjectName}-${Environment}-users"
+      AutoVerifiedAttributes:
+        - email
+      UsernameAttributes:
+        - email
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireUppercase: true
+          RequireLowercase: true
+          RequireNumbers: true
+
+
+  # UserPoolClient created in EdgeStack
+
+
+  UserPoolDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      Domain: !Sub "${ProjectName}-${Environment}-auth"
+      UserPoolId: !Ref UserPool
+  
+
+
+Outputs:
+
+  CognitoUserPool:
+    Description: The Cognito User Pool ID
+    Value: !Ref UserPool
+    Export:
+      Name: !Sub "${ProjectName}-${Environment}-CognitoUserPool"
+
+  CognitoDomain:
+    Description: Cognito Hosted UI domain
+    Value: !Sub "https://${UserPoolDomain}.auth.${AWS::Region}.amazoncognito.com"
+    Export:
+      Name: !Sub "${ProjectName}-${Environment}-CognitoDomain"
+

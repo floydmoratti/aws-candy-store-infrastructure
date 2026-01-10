@@ -34,13 +34,14 @@ Metadata:
           - HostedZoneId
           - CloudFrontAcmCertificateArn
           - CloudFrontPriceClass
+          - EnableGeoRestriction
+          - GeoRestrictionType
+          - GeoRestrictionLocations
       
       - Label:
           default: Api & Security
         Parameters:
           - EnableWaf
-          - JwtIssuer
-          - JwtAudience
           - ThrottleBurstLimit
           - ThrottleRateLimit
       
@@ -177,16 +178,6 @@ Parameters:
       - "true"
       - "false"
 
-  JwtIssuer:
-    Type: String
-    Description: JWT issuer URL (leave empty to disable JWT auth)
-    Default: ""
-
-  JwtAudience:
-    Type: String
-    Description: JWT audience/client ID (leave empty to disable JWT auth)
-    Default: ""
-
   ThrottleBurstLimit:
     Type: Number
     Description: API Gateway throttle burst limit
@@ -291,9 +282,28 @@ Resources:
         - Key: Stack
           Value: Compute
 
+  AuthStack:
+    Type: AWS::CloudFormation::Stack
+    DeletionPolicy: !If [IsProd, Retain, Delete]
+    UpdateReplacePolicy: !If [IsProd, Retain, Delete]
+    Properties:
+      TemplateURL: !Sub "https://${TemplatesBucket}.s3.${AWS::Region}.amazonaws.com/${TemplatesPrefix}/auth.yaml"
+      Parameters:
+        ProjectName: !Ref ProjectName
+        Environment: !Ref Environment
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Stack
+          Value: Auth
+
   ApiStack:
     Type: AWS::CloudFormation::Stack
-    DependsOn: ComputeStack
+    DependsOn:
+      - ComputeStack
+      - AuthStack
     DeletionPolicy: !If [IsProd, Retain, Delete]
     UpdateReplacePolicy: !If [IsProd, Retain, Delete]
     Properties:
@@ -301,8 +311,6 @@ Resources:
       Parameters:
         ProjectName: !Ref ProjectName
         Environment: !Ref Environment
-        JwtIssuer: !Ref JwtIssuer
-        JwtAudience: !Ref JwtAudience
         ThrottleBurstLimit: !Ref ThrottleBurstLimit
         ThrottleRateLimit: !Ref ThrottleRateLimit
       Tags:
