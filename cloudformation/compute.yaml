@@ -56,9 +56,9 @@ Resources:
                 Effect: Allow
                 Action:
                   - dynamodb:GetItem
-                  - dynamodb:PutItem
-                  - dynamodb:UpdateItem
-                  - dynamodb:DeleteItem
+                  # - dynamodb:PutItem
+                  # - dynamodb:UpdateItem
+                  # - dynamodb:DeleteItem
                   - dynamodb:Query
                   - dynamodb:Scan
                 Resource:
@@ -99,6 +99,7 @@ Resources:
                   - dynamodb:UpdateItem
                   - dynamodb:DeleteItem
                   - dynamodb:Query
+                  - dynamodb:ConditionCheckItem
                 Resource:
                   - Fn::ImportValue: !Sub "${ProjectName}-${Environment}-CartsTableArn"
                   - !Sub  # Include Indexes
@@ -149,6 +150,7 @@ Resources:
                 Action:
                   - dynamodb:PutItem
                   - dynamodb:UpdateItem
+                  - dynamodb:ConditionCheckItem
                 Resource:
                   - Fn::ImportValue: !Sub "${ProjectName}-${Environment}-OrdersTableArn"
               - Sid: DynamoDbProductsTableAccess
@@ -187,12 +189,30 @@ Resources:
                 Action:
                   - dynamodb:GetItem
                   - dynamodb:Query
+                  - dynamodb:ConditionCheckItem
                 Resource:
                   - Fn::ImportValue: !Sub "${ProjectName}-${Environment}-OrdersTableArn"
                   - !Sub  # Include Indexes
                     - "${TableArn}/index/*"
                     - TableArn:
                         Fn::ImportValue: !Sub "${ProjectName}-${Environment}-OrdersTableArn"
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
       Tags:
         - Key: Project
           Value: !Ref ProjectName
@@ -336,6 +356,27 @@ Resources:
           Value: !Ref ProjectName
         - Key: Environment
           Value: !Ref Environment
+  
+  NotFoundFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "${ProjectName}-${Environment}-not-found-function"
+      Runtime: python3.11
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 3
+      MemorySize: 128
+      Code:
+        ZipFile: |
+          def handler(event, context):
+              return {
+                  "statusCode": 404,
+                  "headers": {
+                      "Content-Type": "application/json"
+                  },
+                  "body": '{"message":"Route not found"}'
+              }
+
 
 
   # ----------------------
@@ -344,34 +385,42 @@ Resources:
 
   ProductsFunctionLogGroup:
     Type: AWS::Logs::LogGroup
-    DeletionPolicy: Delete
-    UpdateReplacePolicy: Delete
+    DeletionPolicy: !If [IsProd, Retain, Delete]
+    UpdateReplacePolicy: !If [IsProd, Retain, Delete]
     Properties:
       LogGroupName: !Sub "/aws/lambda/${ProductsFunction}"
       RetentionInDays: !If [IsProd, 30, 7]
 
   CartFunctionLogGroup:
     Type: AWS::Logs::LogGroup
-    DeletionPolicy: Delete
-    UpdateReplacePolicy: Delete
+    DeletionPolicy: !If [IsProd, Retain, Delete]
+    UpdateReplacePolicy: !If [IsProd, Retain, Delete]
     Properties:
       LogGroupName: !Sub "/aws/lambda/${CartFunction}"
       RetentionInDays: !If [IsProd, 30, 7]
 
   CheckoutFunctionLogGroup:
     Type: AWS::Logs::LogGroup
-    DeletionPolicy: Delete
-    UpdateReplacePolicy: Delete
+    DeletionPolicy: !If [IsProd, Retain, Delete]
+    UpdateReplacePolicy: !If [IsProd, Retain, Delete]
     Properties:
       LogGroupName: !Sub "/aws/lambda/${CheckoutFunction}"
       RetentionInDays: !If [IsProd, 30, 7]
 
   OrdersFunctionLogGroup:
     Type: AWS::Logs::LogGroup
-    DeletionPolicy: Delete
-    UpdateReplacePolicy: Delete
+    DeletionPolicy: !If [IsProd, Retain, Delete]
+    UpdateReplacePolicy: !If [IsProd, Retain, Delete]
     Properties:
       LogGroupName: !Sub "/aws/lambda/${OrdersFunction}"
+      RetentionInDays: !If [IsProd, 30, 7]
+
+  NotFoundFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: !If [IsProd, Retain, Delete]
+    UpdateReplacePolicy: !If [IsProd, Retain, Delete]
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${NotFoundFunction}"
       RetentionInDays: !If [IsProd, 30, 7]
   
 
@@ -425,4 +474,15 @@ Outputs:
     Value: !Ref OrdersFunction
     Export:
       Name: !Sub "${ProjectName}-${Environment}-OrdersFunctionName"
-      
+
+  NotFoundFunctionArn:
+    Description: NotFound Lambda function ARN
+    Value: !GetAtt NotFoundFunction.Arn
+    Export:
+      Name: !Sub "${ProjectName}-${Environment}-NotFoundFunctionArn"
+
+  NotFoundFunctionName:
+    Description: NotFound Lambda function name
+    Value: !Ref NotFoundFunction
+    Export:
+      Name: !Sub "${ProjectName}-${Environment}-NotFoundFunctionName"

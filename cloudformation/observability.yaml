@@ -340,88 +340,105 @@ Resources:
     Condition: EnableDashboardsCondition
     Properties:
       DashboardName: !Sub "${ProjectName}-${Environment}-overview"
-      DashboardBody: !Sub |
-        {
-          "widgets": [
+      DashboardBody:
+        Fn::Sub:
+          - |
             {
-              "type": "metric",
-              "properties": {
-                "metrics": [
-                  ["AWS/Lambda", "Invocations", {"stat": "Sum", "label": "Products"}],
-                  ["...", {"stat": "Sum", "label": "Cart"}],
-                  ["...", {"stat": "Sum", "label": "Checkout"}],
-                  ["...", {"stat": "Sum", "label": "Orders"}]
-                ],
-                "period": 300,
-                "stat": "Sum",
-                "region": "${AWS::Region}",
-                "title": "Lambda Invocations",
-                "yAxis": {"left": {"min": 0}}
-              }
-            },
-            {
-              "type": "metric",
-              "properties": {
-                "metrics": [
-                  ["AWS/Lambda", "Errors", {"stat": "Sum", "label": "Products"}],
-                  ["...", {"stat": "Sum", "label": "Cart"}],
-                  ["...", {"stat": "Sum", "label": "Checkout"}],
-                  ["...", {"stat": "Sum", "label": "Orders"}]
-                ],
-                "period": 300,
-                "stat": "Sum",
-                "region": "${AWS::Region}",
-                "title": "Lambda Errors",
-                "yAxis": {"left": {"min": 0}}
-              }
-            },
-            {
-              "type": "metric",
-              "properties": {
-                "metrics": [
-                  ["AWS/Lambda", "Duration", {"stat": "Average", "label": "Products"}],
-                  ["...", {"stat": "Average", "label": "Cart"}],
-                  ["...", {"stat": "Average", "label": "Checkout"}],
-                  ["...", {"stat": "Average", "label": "Orders"}]
-                ],
-                "period": 300,
-                "stat": "Average",
-                "region": "${AWS::Region}",
-                "title": "Lambda Duration (ms)",
-                "yAxis": {"left": {"min": 0}}
-              }
-            },
-            {
-              "type": "metric",
-              "properties": {
-                "metrics": [
-                  ["AWS/ApiGateway", "Count", {"stat": "Sum"}],
-                  [".", "4XXError", {"stat": "Sum"}],
-                  [".", "5XXError", {"stat": "Sum"}]
-                ],
-                "period": 300,
-                "stat": "Sum",
-                "region": "${AWS::Region}",
-                "title": "API Gateway Requests & Errors",
-                "yAxis": {"left": {"min": 0}}
-              }
-            },
-            {
-              "type": "metric",
-              "properties": {
-                "metrics": [
-                  ["AWS/DynamoDB", "ConsumedReadCapacityUnits", {"stat": "Sum"}],
-                  [".", "ConsumedWriteCapacityUnits", {"stat": "Sum"}]
-                ],
-                "period": 300,
-                "stat": "Sum",
-                "region": "${AWS::Region}",
-                "title": "DynamoDB Capacity Units",
-                "yAxis": {"left": {"min": 0}}
-              }
+              "widgets": [
+                {
+                  "type": "metric",
+                  "properties": {
+                    "title": "Lambda Invocations",
+                    "region": "${AWS::Region}",
+                    "period": 300,
+                    "stat": "Sum",
+                    "metrics": [
+                      ["AWS/Lambda", "Invocations", "FunctionName", "${ProductsFunctionName}", { "label": "Products" }],
+                      ["AWS/Lambda", "Invocations", "FunctionName", "${CartFunctionName}", { "label": "Cart" }],
+                      ["AWS/Lambda", "Invocations", "FunctionName", "${CheckoutFunctionName}", { "label": "Checkout" }],
+                      ["AWS/Lambda", "Invocations", "FunctionName", "${OrdersFunctionName}", { "label": "Orders" }]
+                    ]
+                  }
+                },
+                {
+                  "type": "metric",
+                  "properties": {
+                    "title": "Lambda Errors",
+                    "region": "${AWS::Region}",
+                    "period": 300,
+                    "stat": "Sum",
+                    "metrics": [
+                      ["AWS/Lambda", "Errors", "FunctionName", "${ProductsFunctionName}", { "label": "Products" }],
+                      ["AWS/Lambda", "Errors", "FunctionName", "${CartFunctionName}", { "label": "Cart" }],
+                      ["AWS/Lambda", "Errors", "FunctionName", "${CheckoutFunctionName}", { "label": "Checkout" }],
+                      ["AWS/Lambda", "Errors", "FunctionName", "${OrdersFunctionName}", { "label": "Orders" }]
+                    ]
+                  }
+                },
+                {
+                  "type": "metric",
+                  "properties": {
+                    "title": "Lambda Duration (ms)",
+                    "region": "${AWS::Region}",
+                    "period": 300,
+                    "stat": "Average",
+                    "metrics": [
+                      ["AWS/Lambda", "Duration", "FunctionName", "${ProductsFunctionName}", { "label": "Products" }],
+                      ["AWS/Lambda", "Duration", "FunctionName", "${CartFunctionName}", { "label": "Cart" }],
+                      ["AWS/Lambda", "Duration", "FunctionName", "${CheckoutFunctionName}", { "label": "Checkout" }],
+                      ["AWS/Lambda", "Duration", "FunctionName", "${OrdersFunctionName}", { "label": "Orders" }]
+                    ]
+                  }
+                },
+                {
+                  "type": "metric",
+                  "properties": {
+                    "title": "API Gateway Requests & Errors",
+                    "region": "${AWS::Region}",
+                    "period": 300,
+                    "stat": "Sum",
+                    "metrics": [
+                      ["AWS/ApiGateway", "Count", "ApiId", "${HttpApiId}", { "label": "Requests" }],
+                      ["AWS/ApiGateway", "4XXError", "ApiId", "${HttpApiId}", { "label": "4XX Errors" }],
+                      ["AWS/ApiGateway", "5XXError", "ApiId", "${HttpApiId}", { "label": "5XX Errors" }]
+                    ]
+                  }
+                },
+                {
+                  "type": "metric",
+                  "properties": {
+                    "title": "DynamoDB Capacity Units",
+                    "region": "${AWS::Region}",
+                    "period": 300,
+                    "stat": "Sum",
+                    "metrics": [
+                      ["AWS/DynamoDB", "ConsumedReadCapacityUnits", "TableName", "${ProductsTableName}", { "label": "Products Read" }],
+                      ["AWS/DynamoDB", "ConsumedWriteCapacityUnits", "TableName", "${ProductsTableName}", { "label": "Products Write" }],
+                      ["AWS/DynamoDB", "ConsumedReadCapacityUnits", "TableName", "${CartsTableName}", { "label": "Carts Read" }],
+                      ["AWS/DynamoDB", "ConsumedWriteCapacityUnits", "TableName", "${CartsTableName}", { "label": "Carts Write" }],
+                      ["AWS/DynamoDB", "ConsumedReadCapacityUnits", "TableName", "${OrdersTableName}", { "label": "Orders Read" }],
+                      ["AWS/DynamoDB", "ConsumedWriteCapacityUnits", "TableName", "${OrdersTableName}", { "label": "Orders Write" }]
+                    ]
+                  }
+                }
+              ]
             }
-          ]
-        }
+          - ProductsFunctionName: !ImportValue
+              Fn::Sub: "${ProjectName}-${Environment}-ProductsFunctionName"
+            CartFunctionName: !ImportValue
+              Fn::Sub: "${ProjectName}-${Environment}-CartFunctionName"
+            CheckoutFunctionName: !ImportValue
+              Fn::Sub: "${ProjectName}-${Environment}-CheckoutFunctionName"
+            OrdersFunctionName: !ImportValue
+              Fn::Sub: "${ProjectName}-${Environment}-OrdersFunctionName"
+            HttpApiId: !ImportValue
+              Fn::Sub: "${ProjectName}-${Environment}-HttpApiId"
+            ProductsTableName: !ImportValue
+              Fn::Sub: "${ProjectName}-${Environment}-ProductsTableName"
+            CartsTableName: !ImportValue
+              Fn::Sub: "${ProjectName}-${Environment}-CartsTableName"
+            OrdersTableName: !ImportValue
+              Fn::Sub: "${ProjectName}-${Environment}-OrdersTableName"
 
 
 

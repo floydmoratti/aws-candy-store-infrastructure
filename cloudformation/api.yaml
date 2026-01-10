@@ -149,6 +149,19 @@ Resources:
       PayloadFormatVersion: "2.0"
       TimeoutInMillis: 30000
 
+  NotFoundIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref HttpApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub
+        - "arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${FunctionArn}/invocations"
+        - FunctionArn:
+            Fn::ImportValue: !Sub "${ProjectName}-${Environment}-NotFoundFunctionArn"
+      IntegrationMethod: POST
+      PayloadFormatVersion: "2.0"
+      TimeoutInMillis: 30000
+
 
   # ----------------------
   # Routes - Products
@@ -158,21 +171,21 @@ Resources:
     Type: AWS::ApiGatewayV2::Route
     Properties:
       ApiId: !Ref HttpApi
-      RouteKey: GET api/products
+      RouteKey: GET /api/products
       Target: !Sub "integrations/${ProductsIntegration}"
   
   GetProductRoute:
     Type: AWS::ApiGatewayV2::Route
     Properties:
       ApiId: !Ref HttpApi
-      RouteKey: GET api/products/{productId}
+      RouteKey: GET /api/products/{productId}
       Target: !Sub "integrations/${ProductsIntegration}"
 
   CreateProductRoute:
     Type: AWS::ApiGatewayV2::Route
     Properties:
       ApiId: !Ref HttpApi
-      RouteKey: POST api/products
+      RouteKey: POST /api/products
       Target: !Sub "integrations/${ProductsIntegration}"
       AuthorizationType: !If [HasJwtConfig, JWT, NONE]
       AuthorizerId: !If [HasJwtConfig, !Ref JwtAuthorizer, !Ref AWS::NoValue]
@@ -181,7 +194,7 @@ Resources:
     Type: AWS::ApiGatewayV2::Route
     Properties:
       ApiId: !Ref HttpApi
-      RouteKey: PUT api/products/{productId}
+      RouteKey: PUT /api/products/{productId}
       Target: !Sub "integrations/${ProductsIntegration}"
       AuthorizationType: !If [HasJwtConfig, JWT, NONE]
       AuthorizerId: !If [HasJwtConfig, !Ref JwtAuthorizer, !Ref AWS::NoValue]
@@ -190,7 +203,7 @@ Resources:
     Type: AWS::ApiGatewayV2::Route
     Properties:
       ApiId: !Ref HttpApi
-      RouteKey: DELETE api/products/{productId}
+      RouteKey: DELETE /api/products/{productId}
       Target: !Sub "integrations/${ProductsIntegration}"
       AuthorizationType: !If [HasJwtConfig, JWT, NONE]
       AuthorizerId: !If [HasJwtConfig, !Ref JwtAuthorizer, !Ref AWS::NoValue]
@@ -204,7 +217,7 @@ Resources:
     Type: AWS::ApiGatewayV2::Route
     Properties:
       ApiId: !Ref HttpApi
-      RouteKey: GET api/cart
+      RouteKey: GET /api/cart
       Target: !Sub "integrations/${CartIntegration}"
       AuthorizationType: !If [HasJwtConfig, JWT, NONE]
       AuthorizerId: !If [HasJwtConfig, !Ref JwtAuthorizer, !Ref AWS::NoValue]
@@ -213,7 +226,7 @@ Resources:
     Type: AWS::ApiGatewayV2::Route
     Properties:
       ApiId: !Ref HttpApi
-      RouteKey: POST api/cart
+      RouteKey: POST /api/cart
       Target: !Sub "integrations/${CartIntegration}"
       AuthorizationType: !If [HasJwtConfig, JWT, NONE]
       AuthorizerId: !If [HasJwtConfig, !Ref JwtAuthorizer, !Ref AWS::NoValue]
@@ -222,7 +235,7 @@ Resources:
     Type: AWS::ApiGatewayV2::Route
     Properties:
       ApiId: !Ref HttpApi
-      RouteKey: PUT api/cart/{itemId}
+      RouteKey: PUT /api/cart/{itemId}
       Target: !Sub "integrations/${CartIntegration}"
       AuthorizationType: !If [HasJwtConfig, JWT, NONE]
       AuthorizerId: !If [HasJwtConfig, !Ref JwtAuthorizer, !Ref AWS::NoValue]
@@ -231,7 +244,7 @@ Resources:
     Type: AWS::ApiGatewayV2::Route
     Properties:
       ApiId: !Ref HttpApi
-      RouteKey: DELETE api/cart/{itemId}
+      RouteKey: DELETE /api/cart/{itemId}
       Target: !Sub "integrations/${CartIntegration}"
       AuthorizationType: !If [HasJwtConfig, JWT, NONE]
       AuthorizerId: !If [HasJwtConfig, !Ref JwtAuthorizer, !Ref AWS::NoValue]
@@ -240,7 +253,7 @@ Resources:
     Type: AWS::ApiGatewayV2::Route
     Properties:
       ApiId: !Ref HttpApi
-      RouteKey: DELETE api/cart
+      RouteKey: DELETE /api/cart
       Target: !Sub "integrations/${CartIntegration}"
       AuthorizationType: !If [HasJwtConfig, JWT, NONE]
       AuthorizerId: !If [HasJwtConfig, !Ref JwtAuthorizer, !Ref AWS::NoValue]
@@ -254,7 +267,7 @@ Resources:
     Type: AWS::ApiGatewayV2::Route
     Properties:
       ApiId: !Ref HttpApi
-      RouteKey: POST api/checkout
+      RouteKey: POST /api/checkout
       Target: !Sub "integrations/${CheckoutIntegration}"
       AuthorizationType: !If [HasJwtConfig, JWT, NONE]
       AuthorizerId: !If [HasJwtConfig, !Ref JwtAuthorizer, !Ref AWS::NoValue]
@@ -268,7 +281,7 @@ Resources:
     Type: AWS::ApiGatewayV2::Route
     Properties:
       ApiId: !Ref HttpApi
-      RouteKey: GET api/orders
+      RouteKey: GET /api/orders
       Target: !Sub "integrations/${OrdersIntegration}"
       AuthorizationType: !If [HasJwtConfig, JWT, NONE]
       AuthorizerId: !If [HasJwtConfig, !Ref JwtAuthorizer, !Ref AWS::NoValue]
@@ -277,10 +290,21 @@ Resources:
     Type: AWS::ApiGatewayV2::Route
     Properties:
       ApiId: !Ref HttpApi
-      RouteKey: GET api/orders/{orderId}
+      RouteKey: GET /api/orders/{orderId}
       Target: !Sub "integrations/${OrdersIntegration}"
       AuthorizationType: !If [HasJwtConfig, JWT, NONE]
       AuthorizerId: !If [HasJwtConfig, !Ref JwtAuthorizer, !Ref AWS::NoValue]
+
+  # ----------------------
+  # Routes - Default
+  # ----------------------
+
+  DefaultRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: $default
+      Target: !Sub "integrations/${NotFoundIntegration}"
 
 
   # ----------------------
@@ -305,7 +329,9 @@ Resources:
           "status":"$context.status",
           "protocol":"$context.protocol",
           "responseLength":"$context.responseLength",
-          "integrationError":"$context.integrationErrorMessage"}
+          "integrationError":"$context.integrationErrorMessage",
+          "userAgent":"$context.identity.userAgent",
+          "authorizer":"$context.authorizer.claims.sub"}
       DefaultRouteSettings:
         ThrottlingBurstLimit: !Ref ThrottleBurstLimit
         ThrottlingRateLimit: !Ref ThrottleRateLimit
@@ -319,8 +345,8 @@ Resources:
     Properties:
       LogGroupName: !Sub "/aws/apigateway/${ProjectName}-${Environment}"
       RetentionInDays: !If [IsProd, 30, 7]
-    DeletionPolicy: Delete
-    UpdateReplacePolicy: Delete
+    DeletionPolicy: !If [IsProd, Retain, Delete]
+    UpdateReplacePolicy: !If [IsProd, Retain, Delete]
 
 
   # ----------------------
@@ -334,7 +360,7 @@ Resources:
         Fn::Sub: "${ProjectName}-${Environment}-ProductsFunctionName"
       Action: lambda:InvokeFunction
       Principal: apigateway.amazonaws.com
-      SourceArn: !Sub "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*"
+      SourceArn: !Sub "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/${Environment}/*"
 
   CartFunctionPermission:
     Type: AWS::Lambda::Permission
@@ -343,7 +369,7 @@ Resources:
         Fn::Sub: "${ProjectName}-${Environment}-CartFunctionName"
       Action: lambda:InvokeFunction
       Principal: apigateway.amazonaws.com
-      SourceArn: !Sub "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*"
+      SourceArn: !Sub "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/${Environment}/*"
 
   CheckoutFunctionPermission:
     Type: AWS::Lambda::Permission
@@ -352,7 +378,7 @@ Resources:
         Fn::Sub: "${ProjectName}-${Environment}-CheckoutFunctionName"
       Action: lambda:InvokeFunction
       Principal: apigateway.amazonaws.com
-      SourceArn: !Sub "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*"
+      SourceArn: !Sub "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/${Environment}/*"
 
   OrdersFunctionPermission:
     Type: AWS::Lambda::Permission
@@ -361,7 +387,16 @@ Resources:
         Fn::Sub: "${ProjectName}-${Environment}-OrdersFunctionName"
       Action: lambda:InvokeFunction
       Principal: apigateway.amazonaws.com
-      SourceArn: !Sub "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*"
+      SourceArn: !Sub "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/${Environment}/*"
+
+  NotFoundFunctionPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !ImportValue
+        Fn::Sub: "${ProjectName}-${Environment}-NotFoundFunctionName"
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/${Environment}/*"
 
 
 
