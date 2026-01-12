@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Signing you in...</title>
+</head>
+<body>
+  <p>Signing you in, please wait…</p>
+
+  <!-- Load runtime configuration -->
+  <script src="/js/config.js"></script>
+
+  <script>
+    // Destructure required values from config.js
+    const {
+      COGNITO_DOMAIN,
+      CLIENT_ID,
+      REDIRECT_URI
+    } = window.APP_CONFIG || {};
+
+    if (!COGNITO_DOMAIN || !CLIENT_ID || !REDIRECT_URI) {
+      console.error("Missing Cognito configuration. Check /js/config.js");
+      throw new Error("Auth configuration missing");
+    }
+
+    async function handleCallback() {
+      const params = new URLSearchParams(window.location.search);
+      const code = params.get("code");
+
+      if (!code) {
+        console.error("No authorization code found in callback URL");
+        return;
+      }
+
+      const tokenEndpoint = `${COGNITO_DOMAIN}/oauth2/token`;
+
+      const body = new URLSearchParams({
+        grant_type: "authorization_code",
+        client_id: CLIENT_ID,
+        code: code,
+        redirect_uri: REDIRECT_URI
+      });
+
+      const response = await fetch(tokenEndpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        body: body.toString()
+      });
+
+      if (!response.ok) {
+        console.error("Token exchange failed", await response.text());
+        return;
+      }
+
+      const tokens = await response.json();
+
+      // Store tokens for the session
+      sessionStorage.setItem("id_token", tokens.id_token);
+      sessionStorage.setItem("access_token", tokens.access_token);
+
+      // Redirect user to homepage (removes callback from browser history)
+      window.location.replace("/");
+    }
+
+    handleCallback();
+  </script>
+</body>
+</html>
