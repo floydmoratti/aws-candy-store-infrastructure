@@ -12,6 +12,9 @@ Parameters:
 
   Environment:
     Type: String
+  
+  DomainName:
+    Type: String
 
   ThrottleBurstLimit:
     Type: Number
@@ -43,7 +46,7 @@ Resources:
         AllowOrigins:
           - !If
             - IsProd
-            - !Sub "https://${ProjectName}.com"
+            - !Sub "https://${DomainName}"
             - "*"
         AllowMethods:
           - GET
@@ -59,7 +62,7 @@ Resources:
           - X-Api-Key
           - X-Amz-Security-Token
         MaxAge: 3600
-        AllowCredentials: false
+        AllowCredentials: true
       Tags:
         Project: !Ref ProjectName
         Environment: !Ref Environment
@@ -87,8 +90,8 @@ Resources:
   # ----------------------
   # Api Integrations
   # ----------------------
-
-  ProductsIntegration:
+  
+  CartAddIntegration:
     Type: AWS::ApiGatewayV2::Integration
     Properties:
       ApiId: !Ref HttpApi
@@ -96,12 +99,12 @@ Resources:
       IntegrationUri: !Sub
         - "arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${FunctionArn}/invocations"
         - FunctionArn:
-            Fn::ImportValue: !Sub "${ProjectName}-${Environment}-ProductsFunctionArn"
+            Fn::ImportValue: !Sub "${ProjectName}-${Environment}-CartAddFunctionArn"
       IntegrationMethod: POST
       PayloadFormatVersion: "2.0"
       TimeoutInMillis: 30000
-  
-  CartIntegration:
+
+  CartGetIntegration:
     Type: AWS::ApiGatewayV2::Integration
     Properties:
       ApiId: !Ref HttpApi
@@ -109,8 +112,60 @@ Resources:
       IntegrationUri: !Sub
         - "arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${FunctionArn}/invocations"
         - FunctionArn:
-            Fn::ImportValue: !Sub "${ProjectName}-${Environment}-CartFunctionArn"
-      IntegrationMethod: POST
+            Fn::ImportValue: !Sub "${ProjectName}-${Environment}-CartGetFunctionArn"
+      IntegrationMethod: GET
+      PayloadFormatVersion: "2.0"
+      TimeoutInMillis: 30000
+
+  CartUpdateIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref HttpApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub
+        - "arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${FunctionArn}/invocations"
+        - FunctionArn:
+            Fn::ImportValue: !Sub "${ProjectName}-${Environment}-CartUpdateFunctionArn"
+      IntegrationMethod: PUT
+      PayloadFormatVersion: "2.0"
+      TimeoutInMillis: 30000
+
+  CartRemoveIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref HttpApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub
+        - "arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${FunctionArn}/invocations"
+        - FunctionArn:
+            Fn::ImportValue: !Sub "${ProjectName}-${Environment}-CartRemoveFunctionArn"
+      IntegrationMethod: DELETE
+      PayloadFormatVersion: "2.0"
+      TimeoutInMillis: 30000
+
+  CartClearIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref HttpApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub
+        - "arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${FunctionArn}/invocations"
+        - FunctionArn:
+            Fn::ImportValue: !Sub "${ProjectName}-${Environment}-CartClearFunctionArn"
+      IntegrationMethod: DELETE
+      PayloadFormatVersion: "2.0"
+      TimeoutInMillis: 30000
+
+  ProductsGetIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref HttpApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub
+        - "arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${FunctionArn}/invocations"
+        - FunctionArn:
+            Fn::ImportValue: !Sub "${ProjectName}-${Environment}-ProductsGetFunctionArn"
+      IntegrationMethod: GET
       PayloadFormatVersion: "2.0"
       TimeoutInMillis: 30000
 
@@ -127,7 +182,7 @@ Resources:
       PayloadFormatVersion: "2.0"
       TimeoutInMillis: 60000
 
-  OrdersIntegration:
+  ProfileGetIntegration:
     Type: AWS::ApiGatewayV2::Integration
     Properties:
       ApiId: !Ref HttpApi
@@ -135,8 +190,21 @@ Resources:
       IntegrationUri: !Sub
         - "arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${FunctionArn}/invocations"
         - FunctionArn:
-            Fn::ImportValue: !Sub "${ProjectName}-${Environment}-OrdersFunctionArn"
-      IntegrationMethod: POST
+            Fn::ImportValue: !Sub "${ProjectName}-${Environment}-ProfileGetFunctionArn"
+      IntegrationMethod: GET
+      PayloadFormatVersion: "2.0"
+      TimeoutInMillis: 30000
+
+  OrdersGetIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref HttpApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub
+        - "arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${FunctionArn}/invocations"
+        - FunctionArn:
+            Fn::ImportValue: !Sub "${ProjectName}-${Environment}-OrdersGetFunctionArn"
+      IntegrationMethod: GET
       PayloadFormatVersion: "2.0"
       TimeoutInMillis: 30000
 
@@ -155,140 +223,122 @@ Resources:
 
 
   # ----------------------
-  # Routes - Products
+  # Routes
   # ----------------------
 
-  GetProductsRoute:
+  CartAddGuestRoute:
     Type: AWS::ApiGatewayV2::Route
     Properties:
       ApiId: !Ref HttpApi
-      RouteKey: GET /api/products
-      Target: !Sub "integrations/${ProductsIntegration}"
-  
-  GetProductRoute:
-    Type: AWS::ApiGatewayV2::Route
-    Properties:
-      ApiId: !Ref HttpApi
-      RouteKey: GET /api/products/{productId}
-      Target: !Sub "integrations/${ProductsIntegration}"
+      RouteKey: POST /api/cart/items/{productId}
+      Target: !Sub "integrations/${CartAddIntegration}"
 
-  CreateProductRoute:
+  CartAddAuthRoute:
     Type: AWS::ApiGatewayV2::Route
     Properties:
       ApiId: !Ref HttpApi
-      RouteKey: POST /api/products
-      Target: !Sub "integrations/${ProductsIntegration}"
-      AuthorizationType: JWT
-      AuthorizerId: !Ref JwtAuthorizer
-  
-  UpdateProductRoute:
-    Type: AWS::ApiGatewayV2::Route
-    Properties:
-      ApiId: !Ref HttpApi
-      RouteKey: PUT /api/products/{productId}
-      Target: !Sub "integrations/${ProductsIntegration}"
+      RouteKey: POST /api/cart/items/{productId}/auth
+      Target: !Sub "integrations/${CartAddIntegration}"
       AuthorizationType: JWT
       AuthorizerId: !Ref JwtAuthorizer
 
-  DeleteProductRoute:
-    Type: AWS::ApiGatewayV2::Route
-    Properties:
-      ApiId: !Ref HttpApi
-      RouteKey: DELETE /api/products/{productId}
-      Target: !Sub "integrations/${ProductsIntegration}"
-      AuthorizationType: JWT
-      AuthorizerId: !Ref JwtAuthorizer
-
-
-  # ----------------------
-  # Routes - Cart
-  # ----------------------
-
-  GetCartRoute:
+  CartGetGuestRoute:
     Type: AWS::ApiGatewayV2::Route
     Properties:
       ApiId: !Ref HttpApi
       RouteKey: GET /api/cart
-      Target: !Sub "integrations/${CartIntegration}"
-      AuthorizationType: JWT
-      AuthorizerId: !Ref JwtAuthorizer
+      Target: !Sub "integrations/${CartGetIntegration}"
 
-  AddToCartRoute:
+  CartGetAuthRoute:
     Type: AWS::ApiGatewayV2::Route
     Properties:
       ApiId: !Ref HttpApi
-      RouteKey: POST /api/cart
-      Target: !Sub "integrations/${CartIntegration}"
+      RouteKey: GET /api/cart/auth
+      Target: !Sub "integrations/${CartGetIntegration}"
       AuthorizationType: JWT
       AuthorizerId: !Ref JwtAuthorizer
 
-  UpdateCartRoute:
+  CartUpdateGuestRoute:
     Type: AWS::ApiGatewayV2::Route
     Properties:
       ApiId: !Ref HttpApi
-      RouteKey: PUT /api/cart/{itemId}
-      Target: !Sub "integrations/${CartIntegration}"
-      AuthorizationType: JWT
-      AuthorizerId: !Ref JwtAuthorizer
+      RouteKey: PUT /api/cart/items/{productId}
+      Target: !Sub "integrations/${CartUpdateIntegration}"
 
-  RemoveFromCartRoute:
+  CartUpdateAuthRoute:
     Type: AWS::ApiGatewayV2::Route
     Properties:
       ApiId: !Ref HttpApi
-      RouteKey: DELETE /api/cart/{itemId}
-      Target: !Sub "integrations/${CartIntegration}"
+      RouteKey: PUT /api/cart/items/{productId}/auth
+      Target: !Sub "integrations/${CartUpdateIntegration}"
       AuthorizationType: JWT
       AuthorizerId: !Ref JwtAuthorizer
 
-  ClearCartRoute:
+  CartRemoveGuestRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: DELETE /api/cart/items/{productId}
+      Target: !Sub "integrations/${CartRemoveIntegration}"
+
+  CartRemoveAuthRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: DELETE /api/cart/items/{productId}/auth
+      Target: !Sub "integrations/${CartRemoveIntegration}"
+      AuthorizationType: JWT
+      AuthorizerId: !Ref JwtAuthorizer
+
+  CartClearGuestRoute:
     Type: AWS::ApiGatewayV2::Route
     Properties:
       ApiId: !Ref HttpApi
       RouteKey: DELETE /api/cart
-      Target: !Sub "integrations/${CartIntegration}"
+      Target: !Sub "integrations/${CartClearIntegration}"
+
+  CartClearAuthRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: DELETE /api/cart/auth
+      Target: !Sub "integrations/${CartClearIntegration}"
       AuthorizationType: JWT
       AuthorizerId: !Ref JwtAuthorizer
 
-
-  # ----------------------
-  # Routes - Checkout
-  # ----------------------
+  ProductsGetRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: GET /api/products
+      Target: !Sub "integrations/${ProductsGetIntegration}"
 
   CheckoutRoute:
     Type: AWS::ApiGatewayV2::Route
     Properties:
       ApiId: !Ref HttpApi
-      RouteKey: POST /api/checkout
+      RouteKey: POST /api/checkout/auth
       Target: !Sub "integrations/${CheckoutIntegration}"
       AuthorizationType: JWT
       AuthorizerId: !Ref JwtAuthorizer
 
-
-  # ----------------------
-  # Routes - Orders
-  # ----------------------
-
-  GetOrdersRoute:
+  ProfileGetRoute:
     Type: AWS::ApiGatewayV2::Route
     Properties:
       ApiId: !Ref HttpApi
-      RouteKey: GET /api/orders
-      Target: !Sub "integrations/${OrdersIntegration}"
+      RouteKey: GET /api/user/profile/auth
+      Target: !Sub "integrations/${ProfileGetIntegration}"
       AuthorizationType: JWT
       AuthorizerId: !Ref JwtAuthorizer
 
-  GetOrderRoute:
+  OrdersGetRoute:
     Type: AWS::ApiGatewayV2::Route
     Properties:
       ApiId: !Ref HttpApi
-      RouteKey: GET /api/orders/{orderId}
-      Target: !Sub "integrations/${OrdersIntegration}"
+      RouteKey: GET /api/orders/auth
+      Target: !Sub "integrations/${OrdersGetIntegration}"
       AuthorizationType: JWT
       AuthorizerId: !Ref JwtAuthorizer
-
-  # ----------------------
-  # Routes - Default
-  # ----------------------
 
   DefaultRoute:
     Type: AWS::ApiGatewayV2::Route
@@ -344,20 +394,56 @@ Resources:
   # Lambda Permissions
   # ----------------------
 
-  ProductsFunctionPermission:
+  CartAddFunctionPermission:
     Type: AWS::Lambda::Permission
     Properties:
       FunctionName: !ImportValue
-        Fn::Sub: "${ProjectName}-${Environment}-ProductsFunctionName"
+        Fn::Sub: "${ProjectName}-${Environment}-CartAddFunctionName"
       Action: lambda:InvokeFunction
       Principal: apigateway.amazonaws.com
       SourceArn: !Sub "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/${Environment}/*"
 
-  CartFunctionPermission:
+  CartGetFunctionPermission:
     Type: AWS::Lambda::Permission
     Properties:
       FunctionName: !ImportValue
-        Fn::Sub: "${ProjectName}-${Environment}-CartFunctionName"
+        Fn::Sub: "${ProjectName}-${Environment}-CartGetFunctionName"
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/${Environment}/*"
+
+  CartUpdateFunctionPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !ImportValue
+        Fn::Sub: "${ProjectName}-${Environment}-CartUpdateFunctionName"
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/${Environment}/*"
+
+  CartRemoveFunctionPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !ImportValue
+        Fn::Sub: "${ProjectName}-${Environment}-CartRemoveFunctionName"
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/${Environment}/*"
+
+  CartClearFunctionPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !ImportValue
+        Fn::Sub: "${ProjectName}-${Environment}-CartClearFunctionName"
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/${Environment}/*"
+
+  ProductsGetFunctionPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !ImportValue
+        Fn::Sub: "${ProjectName}-${Environment}-ProductsGetFunctionName"
       Action: lambda:InvokeFunction
       Principal: apigateway.amazonaws.com
       SourceArn: !Sub "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/${Environment}/*"
@@ -371,11 +457,20 @@ Resources:
       Principal: apigateway.amazonaws.com
       SourceArn: !Sub "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/${Environment}/*"
 
-  OrdersFunctionPermission:
+  ProfileGetFunctionPermission:
     Type: AWS::Lambda::Permission
     Properties:
       FunctionName: !ImportValue
-        Fn::Sub: "${ProjectName}-${Environment}-OrdersFunctionName"
+        Fn::Sub: "${ProjectName}-${Environment}-ProfileGetFunctionName"
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/${Environment}/*"
+
+  OrdersGetFunctionPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !ImportValue
+        Fn::Sub: "${ProjectName}-${Environment}-OrdersGetFunctionName"
       Action: lambda:InvokeFunction
       Principal: apigateway.amazonaws.com
       SourceArn: !Sub "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/${Environment}/*"

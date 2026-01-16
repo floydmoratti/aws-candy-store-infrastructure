@@ -311,6 +311,7 @@ Resources:
       Parameters:
         ProjectName: !Ref ProjectName
         Environment: !Ref Environment
+        DomainName: !Ref DomainName
         ThrottleBurstLimit: !Ref ThrottleBurstLimit
         ThrottleRateLimit: !Ref ThrottleRateLimit
       Tags:

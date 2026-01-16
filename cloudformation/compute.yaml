@@ -34,10 +34,10 @@ Resources:
   # IAM Roles
   # ----------------------
 
-  ProductsLambdaRole:
+  CartAddLambdaRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub "${ProjectName}-${Environment}-products-lambda-role"
+      RoleName: !Sub "${ProjectName}-${Environment}-cart-add-lambda-role"
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -48,7 +48,7 @@ Resources:
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
       Policies:
-        - PolicyName: !Sub "${ProjectName}-${Environment}-products-lambda-policy"
+        - PolicyName: !Sub "${ProjectName}-${Environment}-cart-add-lambda-policy"
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
@@ -56,27 +56,22 @@ Resources:
                 Effect: Allow
                 Action:
                   - dynamodb:GetItem
-                  # - dynamodb:PutItem
-                  # - dynamodb:UpdateItem
-                  # - dynamodb:DeleteItem
-                  - dynamodb:Query
-                  - dynamodb:Scan
                 Resource:
-                  - Fn::ImportValue: !Sub "${ProjectName}-${Environment}-ProductsTableArn"
+                  - Fn::ImportValue: !Sub "${ProjectName}-${Environment}-CartsTableArn"
                   - !Sub  # Include Indexes
                     - "${TableArn}/index/*"
                     - TableArn:
-                        Fn::ImportValue: !Sub "${ProjectName}-${Environment}-ProductsTableArn"
+                        Fn::ImportValue: !Sub "${ProjectName}-${Environment}-CartsTableArn"
       Tags:
         - Key: Project
           Value: !Ref ProjectName
         - Key: Environment
           Value: !Ref Environment
 
-  CartLambdaRole:
+  CartGetLambdaRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub "${ProjectName}-${Environment}-cart-lambda-role"
+      RoleName: !Sub "${ProjectName}-${Environment}-cart-get-lambda-role"
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -87,7 +82,7 @@ Resources:
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
       Policies:
-        - PolicyName: !Sub "${ProjectName}-${Environment}-cart-lambda-policy"
+        - PolicyName: !Sub "${ProjectName}-${Environment}-cart-get-lambda-policy"
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
@@ -95,24 +90,148 @@ Resources:
                 Effect: Allow
                 Action:
                   - dynamodb:GetItem
-                  - dynamodb:PutItem
-                  - dynamodb:UpdateItem
-                  - dynamodb:DeleteItem
-                  - dynamodb:Query
-                  - dynamodb:ConditionCheckItem
                 Resource:
                   - Fn::ImportValue: !Sub "${ProjectName}-${Environment}-CartsTableArn"
                   - !Sub  # Include Indexes
                     - "${TableArn}/index/*"
                     - TableArn:
                         Fn::ImportValue: !Sub "${ProjectName}-${Environment}-CartsTableArn"
-              - Sid: DynamoDbProductsTableAccess
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+  
+  CartUpdateLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ProjectName}-${Environment}-cart-update-lambda-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: !Sub "${ProjectName}-${Environment}-cart-update-lambda-policy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: DynamoDbCartsTableAccess
                 Effect: Allow
                 Action:
                   - dynamodb:GetItem
-                  - dynamodb:Query
+                Resource:
+                  - Fn::ImportValue: !Sub "${ProjectName}-${Environment}-CartsTableArn"
+                  - !Sub  # Include Indexes
+                    - "${TableArn}/index/*"
+                    - TableArn:
+                        Fn::ImportValue: !Sub "${ProjectName}-${Environment}-CartsTableArn"
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+
+  CartRemoveLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ProjectName}-${Environment}-cart-remove-lambda-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: !Sub "${ProjectName}-${Environment}-cart-remove-lambda-policy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: DynamoDbCartsTableAccess
+                Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                Resource:
+                  - Fn::ImportValue: !Sub "${ProjectName}-${Environment}-CartsTableArn"
+                  - !Sub  # Include Indexes
+                    - "${TableArn}/index/*"
+                    - TableArn:
+                        Fn::ImportValue: !Sub "${ProjectName}-${Environment}-CartsTableArn"
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+
+  CartClearLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ProjectName}-${Environment}-cart-clear-lambda-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: !Sub "${ProjectName}-${Environment}-cart-clear-lambda-policy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: DynamoDbCartsTableAccess
+                Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                Resource:
+                  - Fn::ImportValue: !Sub "${ProjectName}-${Environment}-CartsTableArn"
+                  - !Sub  # Include Indexes
+                    - "${TableArn}/index/*"
+                    - TableArn:
+                        Fn::ImportValue: !Sub "${ProjectName}-${Environment}-CartsTableArn"
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+
+  ProductsGetLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ProjectName}-${Environment}-products-get-lambda-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: !Sub "${ProjectName}-${Environment}-products-get-lambda-policy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: DynamoDbCartsTableAccess
+                Effect: Allow
+                Action:
+                  - dynamodb:GetItem
                 Resource:
                   - Fn::ImportValue: !Sub "${ProjectName}-${Environment}-ProductsTableArn"
+                  - !Sub  # Include Indexes
+                    - "${TableArn}/index/*"
+                    - TableArn:
+                        Fn::ImportValue: !Sub "${ProjectName}-${Environment}-ProductsTableArn"
       Tags:
         - Key: Project
           Value: !Ref ProjectName
@@ -141,35 +260,18 @@ Resources:
                 Effect: Allow
                 Action:
                   - dynamodb:GetItem
-                  - dynamodb:Query
-                  - dynamodb:DeleteItem
                 Resource:
                   - Fn::ImportValue: !Sub "${ProjectName}-${Environment}-CartsTableArn"
-              - Sid: DynamoDbOrdersTableAccess
-                Effect: Allow
-                Action:
-                  - dynamodb:PutItem
-                  - dynamodb:UpdateItem
-                  - dynamodb:ConditionCheckItem
-                Resource:
-                  - Fn::ImportValue: !Sub "${ProjectName}-${Environment}-OrdersTableArn"
-              - Sid: DynamoDbProductsTableAccess
-                Effect: Allow
-                Action:
-                  - dynamodb:GetItem
-                  - dynamodb:Query
-                Resource:
-                  - Fn::ImportValue: !Sub "${ProjectName}-${Environment}-ProductsTableArn"
       Tags:
         - Key: Project
           Value: !Ref ProjectName
         - Key: Environment
           Value: !Ref Environment
 
-  OrdersLambdaRole:
+  ProfileGetLambdaRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub "${ProjectName}-${Environment}-orders-lambda-role"
+      RoleName: !Sub "${ProjectName}-${Environment}-profile-get-lambda-role"
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -180,7 +282,37 @@ Resources:
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
       Policies:
-        - PolicyName: !Sub "${ProjectName}-${Environment}-orders-lambda-policy"
+        - PolicyName: !Sub "${ProjectName}-${Environment}-profile-get-lambda-policy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: DynamoDbCartsTableAccess
+                Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                Resource:
+                  - Fn::ImportValue: !Sub "${ProjectName}-${Environment}-CartsTableArn"
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+
+  OrdersGetLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ProjectName}-${Environment}-orders-get-lambda-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: !Sub "${ProjectName}-${Environment}-orders-get-lambda-policy"
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
@@ -188,8 +320,6 @@ Resources:
                 Effect: Allow
                 Action:
                   - dynamodb:GetItem
-                  - dynamodb:Query
-                  - dynamodb:ConditionCheckItem
                 Resource:
                   - Fn::ImportValue: !Sub "${ProjectName}-${Environment}-OrdersTableArn"
                   - !Sub  # Include Indexes
@@ -224,20 +354,20 @@ Resources:
   # Lambda Functions
   # ----------------------
 
-  ProductsFunction:
+  CartAddFunction:
     Type: AWS::Lambda::Function
     Properties:
-      FunctionName: !Sub "${ProjectName}-${Environment}-products-function"
+      FunctionName: !Sub "${ProjectName}-${Environment}-cart-add-function"
       Runtime: python3.11
       Handler: index.handler
-      Role: !GetAtt ProductsLambdaRole.Arn
+      Role: !GetAtt CartAddLambdaRole.Arn
       Code:
         S3Bucket: !Ref LambdaCodeBucket
-        S3Key: !Sub "${LambdaCodeKey}/products.zip"
+        S3Key: !Sub "${LambdaCodeKey}/cart-add.zip"
       Environment:
         Variables:
           PRODUCTS_TABLE: !ImportValue
-            Fn::Sub: "${ProjectName}-${Environment}-ProductsTableName"
+            Fn::Sub: "${ProjectName}-${Environment}-CartsTableArn"
           ENVIRONMENT: !Ref Environment
           LOG_LEVEL: !If [IsProd, INFO, DEBUG]
       Timeout: 30
@@ -249,31 +379,28 @@ Resources:
         Mode: Active
       Tags:
         - Key: Name
-          Value: !Sub "${ProjectName}-${Environment}-products-function"
+          Value: !Sub "${ProjectName}-${Environment}-cart-add-function"
         - Key: Project
           Value: !Ref ProjectName
         - Key: Environment
           Value: !Ref Environment
 
-  CartFunction:
+  CartGetFunction:
     Type: AWS::Lambda::Function
     Properties:
-      FunctionName: !Sub "${ProjectName}-${Environment}-cart-function"
+      FunctionName: !Sub "${ProjectName}-${Environment}-cart-get-function"
       Runtime: python3.11
       Handler: index.handler
-      Role: !GetAtt CartLambdaRole.Arn
+      Role: !GetAtt CartGetLambdaRole.Arn
       Code:
         S3Bucket: !Ref LambdaCodeBucket
-        S3Key: !Sub "${LambdaCodeKey}/cart.zip"
+        S3Key: !Sub "${LambdaCodeKey}/cart-get.zip"
       Environment:
         Variables:
           CARTS_TABLE: !ImportValue
             Fn::Sub: "${ProjectName}-${Environment}-CartsTableName"
-          PRODUCTS_TABLE: !ImportValue
-            Fn::Sub: "${ProjectName}-${Environment}-ProductsTableName"
           ENVIRONMENT: !Ref Environment
           LOG_LEVEL: !If [IsProd, INFO, DEBUG]
-          CART_TTL_DAYS: "30"
       Timeout: 30
       MemorySize: 256
       ReservedConcurrentExecutions: !If [IsProd, 100, 10]
@@ -283,7 +410,131 @@ Resources:
         Mode: Active
       Tags:
         - Key: Name
-          Value: !Sub "${ProjectName}-${Environment}-cart-function"
+          Value: !Sub "${ProjectName}-${Environment}-cart-get-function"
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+  
+  CartUpdateFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "${ProjectName}-${Environment}-cart-update-function"
+      Runtime: python3.11
+      Handler: index.handler
+      Role: !GetAtt CartUpdateLambdaRole.Arn
+      Code:
+        S3Bucket: !Ref LambdaCodeBucket
+        S3Key: !Sub "${LambdaCodeKey}/cart-update.zip"
+      Environment:
+        Variables:
+          CARTS_TABLE: !ImportValue
+            Fn::Sub: "${ProjectName}-${Environment}-CartsTableName"
+          ENVIRONMENT: !Ref Environment
+          LOG_LEVEL: !If [IsProd, INFO, DEBUG]
+      Timeout: 30
+      MemorySize: 256
+      ReservedConcurrentExecutions: !If [IsProd, 100, 10]
+      Architectures:
+        - arm64  # Graviton2
+      TracingConfig:
+        Mode: Active
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-cart-update-function"
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+
+  CartRemoveFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "${ProjectName}-${Environment}-cart-remove-function"
+      Runtime: python3.11
+      Handler: index.handler
+      Role: !GetAtt CartRemoveLambdaRole.Arn
+      Code:
+        S3Bucket: !Ref LambdaCodeBucket
+        S3Key: !Sub "${LambdaCodeKey}/cart-remove.zip"
+      Environment:
+        Variables:
+          CARTS_TABLE: !ImportValue
+            Fn::Sub: "${ProjectName}-${Environment}-CartsTableName"
+          ENVIRONMENT: !Ref Environment
+          LOG_LEVEL: !If [IsProd, INFO, DEBUG]
+      Timeout: 30
+      MemorySize: 256
+      ReservedConcurrentExecutions: !If [IsProd, 100, 10]
+      Architectures:
+        - arm64  # Graviton2
+      TracingConfig:
+        Mode: Active
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-cart-remove-function"
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+
+  CartClearFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "${ProjectName}-${Environment}-cart-clear-function"
+      Runtime: python3.11
+      Handler: index.handler
+      Role: !GetAtt CartClearLambdaRole.Arn
+      Code:
+        S3Bucket: !Ref LambdaCodeBucket
+        S3Key: !Sub "${LambdaCodeKey}/cart-clear.zip"
+      Environment:
+        Variables:
+          CARTS_TABLE: !ImportValue
+            Fn::Sub: "${ProjectName}-${Environment}-CartsTableName"
+          ENVIRONMENT: !Ref Environment
+          LOG_LEVEL: !If [IsProd, INFO, DEBUG]
+      Timeout: 30
+      MemorySize: 256
+      ReservedConcurrentExecutions: !If [IsProd, 100, 10]
+      Architectures:
+        - arm64  # Graviton2
+      TracingConfig:
+        Mode: Active
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-cart-clear-function"
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+
+  ProductsGetFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "${ProjectName}-${Environment}-products-get-function"
+      Runtime: python3.11
+      Handler: index.handler
+      Role: !GetAtt ProductsGetLambdaRole.Arn
+      Code:
+        S3Bucket: !Ref LambdaCodeBucket
+        S3Key: !Sub "${LambdaCodeKey}/products-get.zip"
+      Environment:
+        Variables:
+          CARTS_TABLE: !ImportValue
+            Fn::Sub: "${ProjectName}-${Environment}-ProductsTableArn"
+          ENVIRONMENT: !Ref Environment
+          LOG_LEVEL: !If [IsProd, INFO, DEBUG]
+      Timeout: 30
+      MemorySize: 256
+      ReservedConcurrentExecutions: !If [IsProd, 100, 10]
+      Architectures:
+        - arm64  # Graviton2
+      TracingConfig:
+        Mode: Active
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-products-get-function"
         - Key: Project
           Value: !Ref ProjectName
         - Key: Environment
@@ -305,8 +556,6 @@ Resources:
             Fn::Sub: "${ProjectName}-${Environment}-CartsTableName"
           ORDERS_TABLE: !ImportValue 
             Fn::Sub: "${ProjectName}-${Environment}-OrdersTableName"
-          PRODUCTS_TABLE: !ImportValue
-            Fn::Sub: "${ProjectName}-${Environment}-ProductsTableName"
           ENVIRONMENT: !Ref Environment
           LOG_LEVEL: !If [IsProd, INFO, DEBUG]
           PAYMENT_PROVIDER: "MOCK"
@@ -325,23 +574,22 @@ Resources:
         - Key: Environment
           Value: !Ref Environment
 
-  OrdersFunction:
+  ProfileGetFunction:
     Type: AWS::Lambda::Function
     Properties:
-      FunctionName: !Sub "${ProjectName}-${Environment}-orders-function"
+      FunctionName: !Sub "${ProjectName}-${Environment}-profile-get-function"
       Runtime: python3.11
       Handler: index.handler
-      Role: !GetAtt OrdersLambdaRole.Arn
+      Role: !GetAtt ProfileGetLambdaRole.Arn
       Code:
         S3Bucket: !Ref LambdaCodeBucket
-        S3Key: !Sub "${LambdaCodeKey}/orders.zip"
+        S3Key: !Sub "${LambdaCodeKey}/profile-get.zip"
       Environment:
         Variables:
           ORDERS_TABLE: !ImportValue 
             Fn::Sub: "${ProjectName}-${Environment}-OrdersTableName"
           ENVIRONMENT: !Ref Environment
           LOG_LEVEL: !If [IsProd, INFO, DEBUG]
-          PAYMENT_PROVIDER: "MOCK"
       Timeout: 30
       MemorySize: 256
       ReservedConcurrentExecutions: !If [IsProd, 50, 5]
@@ -351,7 +599,38 @@ Resources:
         Mode: Active
       Tags:
         - Key: Name
-          Value: !Sub "${ProjectName}-${Environment}-orders-function"
+          Value: !Sub "${ProjectName}-${Environment}-profile-get-function"
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+
+  OrdersGetFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "${ProjectName}-${Environment}-orders-get-function"
+      Runtime: python3.11
+      Handler: index.handler
+      Role: !GetAtt OrdersGetLambdaRole.Arn
+      Code:
+        S3Bucket: !Ref LambdaCodeBucket
+        S3Key: !Sub "${LambdaCodeKey}/orders-get.zip"
+      Environment:
+        Variables:
+          ORDERS_TABLE: !ImportValue 
+            Fn::Sub: "${ProjectName}-${Environment}-OrdersTableName"
+          ENVIRONMENT: !Ref Environment
+          LOG_LEVEL: !If [IsProd, INFO, DEBUG]
+      Timeout: 30
+      MemorySize: 256
+      ReservedConcurrentExecutions: !If [IsProd, 50, 5]
+      Architectures:
+        - arm64  # Graviton2
+      TracingConfig:
+        Mode: Active
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-orders-get-function"
         - Key: Project
           Value: !Ref ProjectName
         - Key: Environment
@@ -383,20 +662,52 @@ Resources:
   # Log Groups
   # ----------------------
 
-  ProductsFunctionLogGroup:
+  CartAddFunctionLogGroup:
     Type: AWS::Logs::LogGroup
     DeletionPolicy: !If [IsProd, Retain, Delete]
     UpdateReplacePolicy: !If [IsProd, Retain, Delete]
     Properties:
-      LogGroupName: !Sub "/aws/lambda/${ProductsFunction}"
+      LogGroupName: !Sub "/aws/lambda/${CartAddFunction}"
       RetentionInDays: !If [IsProd, 30, 7]
 
-  CartFunctionLogGroup:
+  CartGetFunctionLogGroup:
     Type: AWS::Logs::LogGroup
     DeletionPolicy: !If [IsProd, Retain, Delete]
     UpdateReplacePolicy: !If [IsProd, Retain, Delete]
     Properties:
-      LogGroupName: !Sub "/aws/lambda/${CartFunction}"
+      LogGroupName: !Sub "/aws/lambda/${CartGetFunction}"
+      RetentionInDays: !If [IsProd, 30, 7]
+
+  CartUpdateFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: !If [IsProd, Retain, Delete]
+    UpdateReplacePolicy: !If [IsProd, Retain, Delete]
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${CartUpdateFunction}"
+      RetentionInDays: !If [IsProd, 30, 7]
+
+  CartRemoveFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: !If [IsProd, Retain, Delete]
+    UpdateReplacePolicy: !If [IsProd, Retain, Delete]
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${CartRemoveFunction}"
+      RetentionInDays: !If [IsProd, 30, 7]
+
+  CartClearFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: !If [IsProd, Retain, Delete]
+    UpdateReplacePolicy: !If [IsProd, Retain, Delete]
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${CartClearFunction}"
+      RetentionInDays: !If [IsProd, 30, 7]
+
+  ProductsGetFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: !If [IsProd, Retain, Delete]
+    UpdateReplacePolicy: !If [IsProd, Retain, Delete]
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${ProductsGetFunction}"
       RetentionInDays: !If [IsProd, 30, 7]
 
   CheckoutFunctionLogGroup:
@@ -407,12 +718,20 @@ Resources:
       LogGroupName: !Sub "/aws/lambda/${CheckoutFunction}"
       RetentionInDays: !If [IsProd, 30, 7]
 
-  OrdersFunctionLogGroup:
+  ProfileGetFunctionLogGroup:
     Type: AWS::Logs::LogGroup
     DeletionPolicy: !If [IsProd, Retain, Delete]
     UpdateReplacePolicy: !If [IsProd, Retain, Delete]
     Properties:
-      LogGroupName: !Sub "/aws/lambda/${OrdersFunction}"
+      LogGroupName: !Sub "/aws/lambda/${ProfileGetFunction}"
+      RetentionInDays: !If [IsProd, 30, 7]
+
+  OrdersGetFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: !If [IsProd, Retain, Delete]
+    UpdateReplacePolicy: !If [IsProd, Retain, Delete]
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${OrdersGetFunction}"
       RetentionInDays: !If [IsProd, 30, 7]
 
   NotFoundFunctionLogGroup:
@@ -427,29 +746,77 @@ Resources:
 
 Outputs:
 
-  ProductsFunctionArn:
-    Description: Products Lambda function ARN
-    Value: !GetAtt ProductsFunction.Arn
+  CartAddFunctionArn:
+    Description: CartAdd Lambda function ARN
+    Value: !GetAtt CartAddFunction.Arn
     Export:
-      Name: !Sub "${ProjectName}-${Environment}-ProductsFunctionArn"
+      Name: !Sub "${ProjectName}-${Environment}-CartAddFunctionArn"
 
-  ProductsFunctionName:
-    Description: Products Lambda function name
-    Value: !Ref ProductsFunction
+  CartAddFunctionName:
+    Description: CartAdd Lambda function name
+    Value: !Ref CartAddFunction
     Export:
-      Name: !Sub "${ProjectName}-${Environment}-ProductsFunctionName"
+      Name: !Sub "${ProjectName}-${Environment}-CartAddFunctionName"
 
-  CartFunctionArn:
-    Description: Cart Lambda function ARN
-    Value: !GetAtt CartFunction.Arn
+  CartGetFunctionArn:
+    Description: CartGet Lambda function ARN
+    Value: !GetAtt CartGetFunction.Arn
     Export:
-      Name: !Sub "${ProjectName}-${Environment}-CartFunctionArn"
+      Name: !Sub "${ProjectName}-${Environment}-CartGetFunctionArn"
 
-  CartFunctionName:
-    Description: Cart Lambda function name
-    Value: !Ref CartFunction
+  CartGetFunctionName:
+    Description: CartGet Lambda function name
+    Value: !Ref CartGetFunction
     Export:
-      Name: !Sub "${ProjectName}-${Environment}-CartFunctionName"
+      Name: !Sub "${ProjectName}-${Environment}-CartGetFunctionName"
+
+  CartUpdateFunctionArn:
+    Description: CartUpdate Lambda function ARN
+    Value: !GetAtt CartUpdateFunction.Arn
+    Export:
+      Name: !Sub "${ProjectName}-${Environment}-CartUpdateFunctionArn"
+
+  CartUpdateFunctionName:
+    Description: CartUpdate Lambda function name
+    Value: !Ref CartUpdateFunction
+    Export:
+      Name: !Sub "${ProjectName}-${Environment}-CartUpdateFunctionName"
+
+  CartRemoveFunctionArn:
+    Description: CartRemove Lambda function ARN
+    Value: !GetAtt CartRemoveFunction.Arn
+    Export:
+      Name: !Sub "${ProjectName}-${Environment}-CartRemoveFunctionArn"
+
+  CartRemoveFunctionName:
+    Description: CartRemove Lambda function name
+    Value: !Ref CartRemoveFunction
+    Export:
+      Name: !Sub "${ProjectName}-${Environment}-CartRemoveFunctionName"
+
+  CartClearFunctionArn:
+    Description: CartClear Lambda function ARN
+    Value: !GetAtt CartClearFunction.Arn
+    Export:
+      Name: !Sub "${ProjectName}-${Environment}-CartClearFunctionArn"
+
+  CartClearFunctionName:
+    Description: CartClear Lambda function name
+    Value: !Ref CartClearFunction
+    Export:
+      Name: !Sub "${ProjectName}-${Environment}-CartClearFunctionName"
+
+  ProductsGetFunctionArn:
+    Description: ProductsGet Lambda function ARN
+    Value: !GetAtt ProductsGetFunction.Arn
+    Export:
+      Name: !Sub "${ProjectName}-${Environment}-ProductsGetFunctionArn"
+
+  ProductsGetFunctionName:
+    Description: ProductsGet Lambda function name
+    Value: !Ref ProductsGetFunction
+    Export:
+      Name: !Sub "${ProjectName}-${Environment}-ProductsGetFunctionName"
 
   CheckoutFunctionArn:
     Description: Checkout Lambda function ARN
@@ -463,17 +830,29 @@ Outputs:
     Export:
       Name: !Sub "${ProjectName}-${Environment}-CheckoutFunctionName"
 
-  OrdersFunctionArn:
-    Description: Orders Lambda function ARN
-    Value: !GetAtt OrdersFunction.Arn
+  ProfileGetFunctionArn:
+    Description: ProfileGet Lambda function ARN
+    Value: !GetAtt ProfileGetFunction.Arn
     Export:
-      Name: !Sub "${ProjectName}-${Environment}-OrdersFunctionArn"
+      Name: !Sub "${ProjectName}-${Environment}-ProfileGetFunctionArn"
 
-  OrdersFunctionName:
-    Description: Orders Lambda function name
-    Value: !Ref OrdersFunction
+  ProfileGetFunctionName:
+    Description: ProfileGet Lambda function name
+    Value: !Ref ProfileGetFunction
     Export:
-      Name: !Sub "${ProjectName}-${Environment}-OrdersFunctionName"
+      Name: !Sub "${ProjectName}-${Environment}-ProfileGetFunctionName"
+
+  OrdersGetFunctionArn:
+    Description: OrdersGet Lambda function ARN
+    Value: !GetAtt OrdersGetFunction.Arn
+    Export:
+      Name: !Sub "${ProjectName}-${Environment}-OrdersGetFunctionArn"
+
+  OrdersGetFunctionName:
+    Description: OrdersGet Lambda function name
+    Value: !Ref OrdersGetFunction
+    Export:
+      Name: !Sub "${ProjectName}-${Environment}-OrdersGetFunctionName"
 
   NotFoundFunctionArn:
     Description: NotFound Lambda function ARN
