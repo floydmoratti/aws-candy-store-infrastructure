@@ -153,6 +153,7 @@ def lambda_handler(event, context):
         order_id = f"order_{str(uuid.uuid4())}"
         now = datetime.now(timezone.utc).isoformat()
 
+        # Intitiate DynamoDB transcation
         order_item = {
             'Put': {
                 'TableName': orders_table_name,
