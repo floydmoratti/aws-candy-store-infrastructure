@@ -521,7 +521,7 @@ Resources:
         S3Key: !Sub "${LambdaCodeKey}/products-get.zip"
       Environment:
         Variables:
-          CARTS_TABLE: !ImportValue
+          PRODUCTS_TABLE: !ImportValue
             Fn::Sub: "${ProjectName}-${Environment}-ProductsTableArn"
           ENVIRONMENT: !Ref Environment
           LOG_LEVEL: !If [IsProd, INFO, DEBUG]

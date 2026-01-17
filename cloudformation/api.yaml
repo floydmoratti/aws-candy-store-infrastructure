@@ -62,7 +62,7 @@ Resources:
           - X-Api-Key
           - X-Amz-Security-Token
         MaxAge: 3600
-        AllowCredentials: true
+        AllowCredentials: false
       Tags:
         Project: !Ref ProjectName
         Environment: !Ref Environment

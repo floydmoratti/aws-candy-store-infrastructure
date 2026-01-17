@@ -6,6 +6,8 @@
 # Custom
 parameters-dev.json
 archived
+examples
+website
 
 # Virtual Environment
 .venv/
