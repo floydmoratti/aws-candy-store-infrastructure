@@ -113,12 +113,14 @@ def lambda_handler(event, context):
         client_tax = Decimal(str(client_pricing.get('tax', 0)))
         client_subtotal = Decimal(str(client_pricing.get('subtotal', 0)))
         client_total = Decimal(str(client_pricing.get('total', 0)))
+        client_shippingAddress = body.get('shippingAddress', {})
+        client_paymentInfo = body.get('paymentInfo', {})
 
         # Check client side pricing with server side
         pricing_mismatch = (
-            not prices_match(server_subtotal, client_subtotal) or
-            not prices_match(server_tax, client_tax) or
             not prices_match(server_shipping, client_shipping) or
+            not prices_match(server_tax, client_tax) or
+            not prices_match(server_subtotal, client_subtotal) or
             not prices_match(server_total, client_total)
         )
 
@@ -135,16 +137,16 @@ def lambda_handler(event, context):
                     'error': 'PRICING_MISMATCH',
                     'message': 'Pricing has changed. Please review updated totals.',
                     'pricing': {
-                        'subtotal': float(server_subtotal),
-                        'tax': float(server_tax),
                         'shipping': float(server_shipping),
+                        'tax': float(server_tax),
+                        'subtotal': float(server_subtotal),
                         'total': float(server_total)
                     }
                 })
             }
         
         # Process payment (placeholder)
-        payment_result = process_payment(body.get('payment', {}), server_total)
+        payment_result = process_payment(client_paymentInfo, server_total)
 
         if not payment_result['success']:
             return error_response(400, payment_result['message'])
@@ -161,13 +163,15 @@ def lambda_handler(event, context):
                     'orderId': {'S': order_id},
                     'userId': {'S': user_id},
                     'items': {'M': to_dynamodb_items(order_items)},
-                    'subtotal': {'N': str(server_subtotal)},
                     'shipping': {'N': str(server_shipping)},
                     'tax': {'N': str(server_tax)},
+                    'subtotal': {'N': str(server_subtotal)},
                     'totalAmount': {'N': str(server_total)},
                     'status': {'S': 'PAID'},
+                    'shippingAddress': {'M': to_dynamodb_address(client_shippingAddress)},
                     'paymentProvider': {'S': payment_result['provider']},
                     'paymentRef': {'S': payment_result['reference']},
+                    'paymentInfo': {'M': to_dynamodb_payment(client_paymentInfo)},
                     'createdAt': {'S': now},
                     'updatedAt': {'S': now}
                 },
@@ -309,6 +313,26 @@ def to_dynamodb_items(items: dict) -> dict:
             }
         }
         for product_id, item in items.items()
+    }
+
+
+def to_dynamodb_address(address: dict) -> dict:
+    return {
+        'firstName': {'S': address.get('firstName', '')},
+        'lastName': {'S': address.get('lastName', '')},
+        'email': {'S': address.get('email', '')},
+        'phone': {'S': address.get('phone', '')},
+        'address': {'S': address.get('address', '')},
+        'city': {'S': address.get('city', '')},
+        'state': {'S': address.get('state', '')},
+        'zip': {'S': address.get('zip', '')},
+    }
+
+
+def to_dynamodb_payment(payment: dict) -> dict:
+    return {
+        'cardLast4': {'S': payment.get('cardLast4', '')},
+        'cardExpiry': {'S': payment.get('cardExpiry', '')},
     }
 
 
