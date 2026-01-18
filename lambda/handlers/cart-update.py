@@ -36,6 +36,9 @@ def lambda_handler(event, context):
     Update item weight in cart
     Routes: PUT /api/cart/items/{productId} and PUT /api/cart/items/{productId}/auth
     """
+
+    log_debug("Received event", function="lambda_handler()", event=json.dumps(event, indent=2, default=str))
+    
     try:
         # Extract productId from path
         product_id = event['pathParameters']['productId']
@@ -102,3 +105,13 @@ def lambda_handler(event, context):
     except Exception as e:
         print(f'Error: {str(e)}')
         return error_response(500, f'Internal server error: {str(e)}')
+
+
+# ----------------------
+# Helper Functions
+# ----------------------
+
+def log_debug(msg, **data):
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug("%s | %s", msg, data)
+        

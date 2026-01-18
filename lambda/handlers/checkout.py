@@ -47,6 +47,9 @@ def lambda_handler(event, context):
     Process checkout and create order
     Route: POST /api/checkout/auth
     """
+
+    log_debug("Received event", function="lambda_handler()", event=json.dumps(event, indent=2, default=str))
+    
     try:
         # Get userId from JWT authorizer
         user_id = get_user_id(event)
@@ -254,45 +257,56 @@ def lambda_handler(event, context):
 
 def validate_checkout_data(data):
     """Validate checkout request data"""
+
+    log_debug("Validating checkout data", function="validate_checkout_data()", data=data)
+
     required_fields = ['items', 'shipping', 'payment', 'pricing']
-    
     for field in required_fields:
         if field not in data:
+            log_debug("Required field not in data", function="validate_checkout_data()", field=field)
             return False
     
     # Validate shipping address
     shipping_fields = ['firstName', 'lastName', 'email', 'phone', 'address', 'city', 'state', 'zip']
     for field in shipping_fields:
         if field not in data['shipping'] or not data['shipping'][field]:
+            log_debug("Required field not in data", function="validate_checkout_data()", field=field)
             return False
     
     # Validate payment info
     payment_fields = ['cardName', 'cardLast4', 'cardExpiry']
     for field in payment_fields:
         if field not in data['payment'] or not data['payment'][field]:
+            log_debug("Required field not in data", function="validate_checkout_data()", field=field)
             return False
     
+    log_debug("Checkout data successfully valididated", function="validate_checkout_data()")
+
     return True
 
 
 def process_payment(payment_info, amount):
     """Process payment (placeholder implementation)"""
 
+    log_debug("Processing payment", function="process_payment()", payment_info=payment_info, amount=amount)
+
     # Placeholder validation
     if not payment_info.get('cardName'):
+        log_debug("cardName not in payment_info", function="process_payment()")
         return {
             'success': False,
             'message': 'Invalid card name'
         }
     
     if not payment_info.get('cardLast4'):
+        log_debug("cardLast4 not in payment_info", function="process_payment()")
         return {
             'success': False,
             'message': 'Invalid card number'
         }
     
     # Simulate successful payment
-    return {
+    response = {
         'success': True,
         'amount': amount,
         'provider': 'DEMO_PAYMENT',
@@ -300,9 +314,16 @@ def process_payment(payment_info, amount):
         'message': 'Payment processed successfully'
     }
 
+    log_debug("Payment success", function="process_payment()", response=response)
+
+    return response
+
 
 def to_dynamodb_items(items: dict) -> dict:
-    return {
+
+    log_debug("Converting items to DynamoDB dict", function="to_dynamodb_items()", items=items)
+
+    dynamodb_items = {
         product_id: {
             'M': {
                 'productId': {'S': item['productId']},
@@ -315,9 +336,16 @@ def to_dynamodb_items(items: dict) -> dict:
         for product_id, item in items.items()
     }
 
+    log_debug("Converted items to DynamoDB dict", function="to_dynamodb_items()", dynamodb_items=dynamodb_items)
+
+    return dynamodb_items
+
 
 def to_dynamodb_address(address: dict) -> dict:
-    return {
+
+    log_debug("Converting address to DynamoDB dict", function="to_dynamodb_address()", address=address)
+
+    dynamodb_address = {
         'firstName': {'S': address.get('firstName', '')},
         'lastName': {'S': address.get('lastName', '')},
         'email': {'S': address.get('email', '')},
@@ -328,13 +356,30 @@ def to_dynamodb_address(address: dict) -> dict:
         'zip': {'S': address.get('zip', '')},
     }
 
+    log_debug("Converted address to DynamoDB dict", function="to_dynamodb_address()", dynamodb_address=dynamodb_address)
+
+    return dynamodb_address
+
 
 def to_dynamodb_payment(payment: dict) -> dict:
-    return {
+
+    log_debug("Converting payment to DynamoDB dict", function="to_dynamodb_payment()", payment=payment)
+
+    dynamodb_payment = {
         'cardLast4': {'S': payment.get('cardLast4', '')},
         'cardExpiry': {'S': payment.get('cardExpiry', '')},
     }
 
+    log_debug("Converted payment to DynamoDB dict", function="to_dynamodb_payment()", dynamodb_payment=dynamodb_payment)
+
+    return dynamodb_payment
+
 
 def prices_match(a: Decimal, b: Decimal) -> bool:
             return abs(a - b) <= PRICE_TOLERANCE
+
+
+def log_debug(msg, **data):
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug("%s | %s", msg, data)
+        

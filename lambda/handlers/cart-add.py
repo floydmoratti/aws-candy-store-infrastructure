@@ -37,6 +37,9 @@ def lambda_handler(event, context):
     Add item to cart
     Routes: POST /api/cart/items/{productId} and POST /api/cart/items/{productId}/auth
     """
+    
+    log_debug("Received event", function="lambda_handler()", event=json.dumps(event, indent=2, default=str))
+
     try:
         # Extract productId from path
         product_id = event['pathParameters']['productId']
@@ -51,12 +54,12 @@ def lambda_handler(event, context):
         # Get userId from JWT authorizer or use cookie for guest
         user_id = get_user_id(event)
         cart_id = get_cart_id(user_id)
+        log_debug("Resolved cart id", function="lambda_handler()", user_id=user_id, cart_id=cart_id)
 
         # Fetch product details
         product = get_product(product_id, products_table)
         if not product:
-            return error_response(404, 'Product not found')
-        
+            return error_response(404, 'Product not found')        
         if not product.get('isActive', False):
             return error_response(400, 'Product is not available')
         
@@ -64,6 +67,7 @@ def lambda_handler(event, context):
         available_grams = product.get('availableGrams', 0)
         if available_grams < weight_grams:
             return error_response(400, 'Insufficient stock')
+        log_debug("Resolved product", function="lambda_handler()", product=product, available_grams=available_grams)
         
         # Get or create cart
         cart = get_or_create_cart(cart_id, user_id)
@@ -85,10 +89,13 @@ def lambda_handler(event, context):
                 'weightGrams': weight_grams,
                 'priceAtAdd': float(price_per_unit)
             }
+        log_debug("Resolved cart", function="lambda_handler()", cart=cart, price_per_unit=price_per_unit, items=items)
         
         # Update cart in DynamoDB
         now = datetime.now(timezone.utc).isoformat()
         expires_at = int((datetime.now(timezone.utc) + timedelta(days=30)).timestamp())
+
+        log_debug("Updating cart in DynamoDB", function="lambda_handler()", cart_id=cart_id, table="Carts")
 
         carts_table.update_item(
             Key={'cartId': cart_id},
@@ -104,6 +111,8 @@ def lambda_handler(event, context):
                 ':status': 'ACTIVE'
             }
         )
+
+        log_debug("Updated cart in DynamoDB", function="lambda_handler()", cart_id=cart_id, table="Carts")
 
         # Build response cart
         response_cart = build_cart_response(cart_id, items, user_id)
@@ -124,12 +133,17 @@ def lambda_handler(event, context):
 
 def get_or_create_cart(cart_id, user_id):
     """Get existing cart or create new one"""
+
+    log_debug("Fetching cart from DynamoDB", function="get_or_create_cart()", cart_id=cart_id, table="Carts")
+
     try:
         response = carts_table.get_item(Key={'cartId': cart_id})
         if 'Item' in response:
+            log_debug("Cart fetched from DynamoDB", function="get_or_create_cart()", cart=response['Item'])
             return response['Item']
         else:
             # Return empty cart structure
+            log_debug("No cart in DynamoDB", function="get_or_create_cart()")
             return {
                 'cartId': cart_id,
                 'userId': user_id,
@@ -144,3 +158,8 @@ def get_or_create_cart(cart_id, user_id):
             'items': {},
             'status': 'ACTIVE'
         }
+    
+
+def log_debug(msg, **data):
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug("%s | %s", msg, data)

@@ -1,5 +1,6 @@
 # CART-GET.PY
 
+import json
 import boto3
 import os
 import logging
@@ -28,6 +29,9 @@ def lambda_handler(event, context):
     Get cart
     Routes: GET /api/cart and GET /api/cart/auth
     """
+
+    log_debug("Received event", function="lambda_handler()", event=json.dumps(event, indent=2, default=str))
+    
     try:
         # Get userId from JWT authorizer or use cookie for guest
         user_id = get_user_id(event)
@@ -64,3 +68,13 @@ def lambda_handler(event, context):
     except Exception as e:
         logger.error(f'Error: {str(e)}')
         return error_response(500, f'Internal server error: {str(e)}')
+
+
+# ----------------------
+# Helper Functions
+# ----------------------
+
+def log_debug(msg, **data):
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug("%s | %s", msg, data)
+        

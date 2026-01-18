@@ -1,5 +1,6 @@
 # CART-CLEAR.PY
 
+import json
 import boto3
 import os
 import logging
@@ -29,6 +30,9 @@ def lambda_handler(event, context):
     Clear entire cart
     Routes: DELETE /api/cart and DELETE /api/cart/auth
     """
+
+    log_debug("Received event", function="lambda_handler()", event=json.dumps(event, indent=2, default=str))
+
     try:
         # Get userId from JWT authorizer or use cookie for guest
         user_id = get_user_id(event)
@@ -37,6 +41,8 @@ def lambda_handler(event, context):
         # Clear cart by setting items to empty dict
         now = datetime.now(timezone.utc).isoformat()
         expires_at = int((datetime.now(timezone.utc) + timedelta(days=30)).timestamp())
+
+        log_debug("Updating cart in DynamoDB", function="lambda_handler()", cart_id=cart_id, table="Carts")
 
         carts_table.update_item(
             Key={'cartId': cart_id},
@@ -51,6 +57,8 @@ def lambda_handler(event, context):
                 ':status': 'ACTIVE'
             }
         )
+
+        log_debug("Updated cart in DynamoDB", function="lambda_handler()", cart_id=cart_id, table="Carts")
 
         # Build empty cart response
         response_cart = {
@@ -70,3 +78,13 @@ def lambda_handler(event, context):
     except Exception as e:
         logger.error(f'Error: {str(e)}')
         return error_response(500, f'Internal server error: {str(e)}')
+
+
+# ----------------------
+# Helper Functions
+# ----------------------
+
+def log_debug(msg, **data):
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug("%s | %s", msg, data)
+        

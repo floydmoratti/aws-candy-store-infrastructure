@@ -1,5 +1,6 @@
 # ORDERS-GET.PY
 
+import json
 import boto3
 import os
 import logging
@@ -29,6 +30,9 @@ def lambda_handler(event, context):
     Get user's order history
     Route: GET /api/orders/auth
     """
+
+    log_debug("Received event", function="lambda_handler()", event=json.dumps(event, indent=2, default=str))
+    
     try:
         # Get userId from JWT authorizer
         user_id = get_user_id(event)
@@ -76,7 +80,10 @@ def lambda_handler(event, context):
 
 def format_order(order):
     """Format order for frontend consumption"""
-    return {
+
+    log_debug("Formating order for frontend", function="format_order()", order=order)
+
+    formatted_order = {
         'orderId': order['orderId'],
         'userId': order['userId'],
         'items': order.get('items', {}),
@@ -92,3 +99,13 @@ def format_order(order):
         'createdAt': order.get('createdAt', ''),
         'updatedAt': order.get('updatedAt', '')
     }
+
+    log_debug("Formatted order for frontend", function="format_order()", formatted_order=formatted_order)
+
+    return formatted_order
+
+
+def log_debug(msg, **data):
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug("%s | %s", msg, data)
+        

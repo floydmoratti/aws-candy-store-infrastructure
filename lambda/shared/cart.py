@@ -17,9 +17,21 @@ logger.setLevel(getattr(logging, log_level, logging.INFO))
 
 def get_cart(cart_id, carts_table):
     """Fetch cart from DynamoDB"""
+
+    log_debug("Fetching cart from DynamoDB", function="get_cart()", cart_id=cart_id, table="Carts")
+
     try:
         response = carts_table.get_item(Key={'cartId': cart_id})
-        return response.get('Item')
+
+        item = response.get('Item')
+        if not item:
+            log_debug("Cart not found", function="get_cart()", cart_id=cart_id)
+            return None
+
+        log_debug("Cart fetched from DynamoDB", function="get_cart()", cart_id=cart_id)
+
+        return item
+    
     except Exception as e:
         logger.error(f'Error fetching cart: {str(e)}')
         return None
@@ -27,12 +39,18 @@ def get_cart(cart_id, carts_table):
 
 def get_user_id(event):
     """Extract userId from JWT authorizer claims or generate guest ID from cookie"""
-    # Check for JWT authorizer claims (authenticated user)
+
+    log_debug("Extracting userId", function="get_user_id()")
+
+    # Check for JWT authorizer claims
     if 'requestContext' in event and 'authorizer' in event['requestContext']:
         claims = event['requestContext']['authorizer'].get('claims', {})
         if 'sub' in claims:
+            log_debug("Cognito user ID found in event", function="get_user_id()", user_id=claims['sub'])
             return claims['sub']  # Cognito user ID
     
+    log_debug("No Cognito user ID found in event, checking cookies", function="get_user_id()")
+
     # Guest user - check for cart cookie
     headers = event.get('headers', {})
     cookies = headers.get('cookie', '') or headers.get('Cookie', '')
@@ -41,10 +59,16 @@ def get_user_id(event):
         for cookie in cookies.split(';'):
             cookie = cookie.strip()
             if cookie.startswith('cartId='):
-                return f"guest_{cookie.split('=')[1]}"
+                cart_cookie = f"guest_{cookie.split('=')[1]}"
+                log_debug("Cart cookie found", function="get_user_id()", cart_cookie=cart_cookie)
+                return cart_cookie
     
     # New guest user
-    return f"guest_{str(uuid.uuid4())}"
+    new_user_id = f"guest_{str(uuid.uuid4())}"
+
+    log_debug("No cart cookie found, generated new user id", function="get_user_id()", new_user_id=new_user_id)
+
+    return new_user_id
 
 
 def get_cart_id(user_id):
@@ -57,6 +81,9 @@ def get_cart_id(user_id):
 
 def build_cart_response(cart_id, items, user_id):
     """Build cart response matching frontend expectations"""
+
+    log_debug("Building cart response", function="build_cart_response()", cart_id=cart_id, user_id=user_id, items=items)
+
     cart_items = []
     subtotal = 0
     total_weight = 0
@@ -80,7 +107,7 @@ def build_cart_response(cart_id, items, user_id):
         subtotal += total_price
         total_weight += weight_grams
 
-    return {
+    response = {
         'cartId': cart_id,
         'userId': user_id,
         'items': cart_items,
@@ -88,3 +115,12 @@ def build_cart_response(cart_id, items, user_id):
         'totalWeight': total_weight,
         'subtotal': round(subtotal, 2)
     }
+
+    log_debug("Response built", function="build_cart_response()", response=response)
+
+    return response
+
+
+def log_debug(msg, **data):
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug("%s | %s", msg, data)

@@ -1,5 +1,6 @@
 # PRODUCTS-GET.PY
 
+import json
 import boto3
 import os
 import logging
@@ -23,11 +24,14 @@ logger.setLevel(getattr(logging, log_level, logging.INFO))
 # ----------------------
 
 def lambda_handler(event, context):
-    
-    # Get all active products with stock information
-    # Route: GET /api/products
-    # Used by frontend to check stock availability and update button states
-    
+    """
+    Get all active products with stock information
+    Route: GET /api/products
+    Used by frontend to check stock availability and update button states
+    """
+
+    log_debug("Received event", function="lambda_handler()", event=json.dumps(event, indent=2, default=str))
+
     try:
         # Scan for all active products
         response = products_table.scan(
@@ -57,3 +61,13 @@ def lambda_handler(event, context):
     except Exception as e:
         logger.error(f'Error: {str(e)}')
         return error_response(500, f'Internal server error: {str(e)}')
+    
+
+# ----------------------
+# Helper Functions
+# ----------------------
+
+def log_debug(msg, **data):
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug("%s | %s", msg, data)
+        
